@@ -1,0 +1,102 @@
+/* ==================================================================
+   词渊 DeepWord · 设计变量
+   理念：宣纸底色 × 墨色排版 × 朱砂点睛。克制的编辑感，而非模板化的
+   SaaS 卡片堆叠。
+   ================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* 纸与墨 */
+  --paper: #f3eee3;
+  --paper-deep: #eae3d3;
+  --paper-raised: #f9f5eb;
+  --ink: #1d1c18;
+  --ink-soft: #46423a;
+  --ink-faint: #7c7565;
+  --ink-ghost: #a49c8a;
+  --line: rgba(29, 28, 24, 0.13);
+  --line-strong: rgba(29, 28, 24, 0.26);
+
+  /* 朱砂 / 青绿 / 赭金 */
+  --vermilion: #bd3f20;
+  --vermilion-deep: #972f16;
+  --vermilion-wash: rgba(189, 63, 32, 0.09);
+  --vermilion-line: rgba(189, 63, 32, 0.28);
+  --sage: #5a6b4d;
+  --sage-deep: #43523a;
+  --sage-wash: rgba(90, 107, 77, 0.1);
+  --gold: #9c7628;
+  --gold-wash: rgba(156, 118, 40, 0.1);
+
+  /* 面 */
+  --card: rgba(250, 246, 236, 0.78);
+  --card-solid: #faf6ec;
+  --card-deep: #f0e9da;
+  --overlay: rgba(24, 23, 19, 0.42);
+
+  /* 阴影——薄而散，像纸叠起来的感觉 */
+  --shadow-sm: 0 1px 2px rgba(45, 39, 26, 0.05), 0 2px 8px rgba(45, 39, 26, 0.04);
+  --shadow-md: 0 2px 4px rgba(45, 39, 26, 0.05), 0 10px 28px rgba(45, 39, 26, 0.07);
+  --shadow-lg: 0 4px 10px rgba(45, 39, 26, 0.06), 0 24px 60px rgba(45, 39, 26, 0.12);
+  --shadow-vermilion: 0 6px 20px rgba(151, 47, 22, 0.22);
+
+  /* 字体 */
+  --font-display: "Songti SC", "STSong", "Noto Serif CJK SC", "Noto Serif SC",
+    "Source Han Serif SC", "SimSun", serif;
+  --font-word: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    "Songti SC", "STSong", serif;
+  --font-body: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Noto Sans CJK SC",
+    "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, monospace;
+
+  /* 尺寸 */
+  --radius-xs: 2px;
+  --radius-sm: 5px;
+  --radius-md: 9px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+  --sidebar-width: 228px;
+  --content-max: 1180px;
+
+  /* 动效 */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 140ms;
+  --duration-base: 240ms;
+  --duration-slow: 480ms;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --paper: #141512;
+  --paper-deep: #0f100e;
+  --paper-raised: #1b1c18;
+  --ink: #ece6d6;
+  --ink-soft: #c9c2b0;
+  --ink-faint: #918a79;
+  --ink-ghost: #625d50;
+  --line: rgba(236, 230, 214, 0.12);
+  --line-strong: rgba(236, 230, 214, 0.24);
+
+  --vermilion: #e06447;
+  --vermilion-deep: #c04a30;
+  --vermilion-wash: rgba(224, 100, 71, 0.12);
+  --vermilion-line: rgba(224, 100, 71, 0.32);
+  --sage: #94a884;
+  --sage-deep: #7c906d;
+  --sage-wash: rgba(148, 168, 132, 0.12);
+  --gold: #c8a45c;
+  --gold-wash: rgba(200, 164, 92, 0.12);
+
+  --card: rgba(28, 29, 25, 0.72);
+  --card-solid: #1d1e1a;
+  --card-deep: #24251f;
+  --overlay: rgba(0, 0, 0, 0.6);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 10px 28px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.35), 0 24px 60px rgba(0, 0, 0, 0.45);
+  --shadow-vermilion: 0 6px 20px rgba(192, 74, 48, 0.25);
+}

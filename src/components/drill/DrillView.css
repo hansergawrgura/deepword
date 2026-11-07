@@ -1,0 +1,1707 @@
+/* ==================================================================
+   错题特训 · AI 错题特训页
+   宣纸 × 墨线 × 朱批：左侧朱线试卷、朱砂「对/误」小印、成绩单双线。
+   只在 .drill-view 语境里使用；通用类（btn / badge / callout 等）复用
+   styles/ui.css，少量覆盖均提高一级选择器优先级，避免样式加载顺序问题。
+   ================================================================== */
+
+.drill-view {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* 视图头：略小一号的朱印，避免与页内其他印章打架 */
+.drill-head .drill-head__seal {
+  width: 26px;
+  height: 26px;
+  font-size: 15px;
+}
+
+.drill-head__actions {
+  padding-bottom: 4px;
+}
+
+/* ==================================================================
+   一、选题阶段
+   ================================================================== */
+
+.drill-setup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 336px;
+  gap: 26px;
+  align-items: start;
+}
+
+/* ------------------------------ 错处清单 ------------------------------ */
+
+.drill-sheet {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--card-solid);
+  border: 1px solid var(--line-strong);
+  border-top: 2px solid var(--ink-soft);
+  border-radius: 3px;
+  box-shadow: var(--shadow-md);
+}
+
+.drill-sheet__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.drill-sheet__intro {
+  min-width: 0;
+}
+
+.drill-sheet__title {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.drill-sheet__sub {
+  max-width: 460px;
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--ink-faint);
+}
+
+.drill-sheet__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.drill-sheet__count {
+  margin-right: 6px;
+  font-size: 12px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.drill-sheet__count b {
+  margin: 0 1px;
+  font-family: var(--font-word);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.drill-words {
+  display: flex;
+  flex-direction: column;
+}
+
+.drill-words > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.drill-word {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 22px;
+  text-align: left;
+  background: transparent;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.drill-word:hover {
+  background: var(--paper-raised);
+}
+
+.drill-word.is-selected {
+  background: var(--vermilion-wash);
+  box-shadow: inset 2px 0 0 var(--vermilion);
+}
+
+.drill-word__check {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  background: var(--paper-raised);
+  color: var(--card-solid);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.drill-word.is-selected .drill-word__check {
+  background: var(--vermilion);
+  border-color: var(--vermilion);
+}
+
+.drill-word.is-selected .drill-word__check::after {
+  content: '✓';
+}
+
+.drill-word__main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.drill-word__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.drill-word__term {
+  font-family: var(--font-word);
+  font-size: 18px;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+.drill-word__phonetic {
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-ghost);
+}
+
+.drill-word__badge {
+  transform: translateY(-1px);
+}
+
+.drill-word__meaning {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.drill-word__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.drill-word__wrong {
+  font-weight: 600;
+  color: var(--vermilion);
+}
+
+.drill-sheet .drill-empty {
+  padding: 44px 24px 48px;
+}
+
+.drill-empty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* ------------------------------- 命题设定 ------------------------------- */
+
+.drill-aside {
+  position: sticky;
+  top: 20px;
+  min-width: 0;
+}
+
+.drill-aside__panel {
+  padding: 22px 22px 20px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-top: 2px solid var(--ink-soft);
+  border-radius: 3px;
+  box-shadow: var(--shadow-sm);
+}
+
+.drill-aside__head {
+  margin-bottom: 18px;
+}
+
+.drill-aside__title {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.drill-set {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.drill-set__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drill-set__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+}
+
+.drill-set__value {
+  font-family: var(--font-word);
+  font-size: 13.5px;
+  letter-spacing: 0.02em;
+  color: var(--vermilion);
+}
+
+.drill-seg {
+  display: flex;
+  width: 100%;
+}
+
+.drill-seg .segmented__option {
+  flex: 1 1 auto;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.drill-set__desc {
+  margin-top: 2px;
+}
+
+/* ------------------------------- 出题引擎 ------------------------------- */
+
+.drill-engine {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.drill-engine__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.drill-engine__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.drill-engine__meta > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.drill-engine__meta dt {
+  flex: none;
+  width: 32px;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  color: var(--ink-ghost);
+}
+
+.drill-engine__meta dd {
+  min-width: 0;
+  color: var(--ink-soft);
+}
+
+.drill-engine__model {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.drill-engine .drill-callout {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.drill-engine .drill-callout .btn {
+  margin-top: 4px;
+}
+
+.drill-engine__link {
+  align-self: flex-start;
+  margin-left: -10px;
+}
+
+/* --------------------------------- 主按钮 -------------------------------- */
+
+.drill-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.drill-cta__hint {
+  margin-top: 2px;
+  text-align: center;
+}
+
+/* ==================================================================
+   二、组卷中
+   ================================================================== */
+
+.drill-generating {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 40px;
+}
+
+.drill-draft {
+  display: flex;
+  gap: 28px;
+  width: min(700px, 100%);
+  padding: 34px 34px 26px;
+  background: var(--card-solid);
+  border: 1px solid var(--line-strong);
+  border-top: 2px solid var(--ink-soft);
+  border-radius: 3px;
+  box-shadow: var(--shadow-md);
+}
+
+.drill-draft__seal {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 58px;
+  height: 58px;
+  background: var(--vermilion);
+  border-radius: 2px;
+  color: #f7f1e5;
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.05;
+  letter-spacing: 0.06em;
+  box-shadow:
+    inset 0 0 0 1px rgba(247, 241, 229, 0.3),
+    var(--shadow-vermilion);
+  animation: drill-seal-breathe 2.6s ease-in-out infinite;
+}
+
+.drill-draft__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.drill-draft__title {
+  margin: 8px 0 16px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.drill-draft__log {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+
+.drill-draft__log li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-ghost);
+  transition: color var(--duration-base) var(--ease-out);
+}
+
+.drill-draft__log li::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 2px;
+  width: 5px;
+  height: 5px;
+  background: var(--line-strong);
+  border-radius: 50%;
+}
+
+.drill-draft__log li.is-active {
+  color: var(--ink);
+}
+
+.drill-draft__log li.is-active::before {
+  background: var(--vermilion);
+  animation: drill-ink-pulse 1.6s ease-out infinite;
+}
+
+.drill-draft__bar {
+  position: relative;
+  height: 2px;
+  margin: 4px 0 18px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.drill-draft__bar span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, var(--vermilion), transparent);
+  animation: drill-ink-flow 1.9s var(--ease-out) infinite;
+}
+
+.drill-draft__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.drill-draft__words {
+  margin-bottom: 18px;
+}
+
+.drill-draft__words .mono-label {
+  display: block;
+  margin-bottom: 7px;
+}
+
+.drill-draft__words ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.drill-draft__words li {
+  padding: 2px 9px;
+  font-family: var(--font-word);
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink-soft);
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+@keyframes drill-seal-breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+    box-shadow:
+      inset 0 0 0 1px rgba(247, 241, 229, 0.3),
+      0 4px 14px rgba(151, 47, 22, 0.18);
+  }
+  50% {
+    transform: translateY(-1px);
+    box-shadow:
+      inset 0 0 0 1px rgba(247, 241, 229, 0.3),
+      0 10px 26px rgba(151, 47, 22, 0.32);
+  }
+}
+
+@keyframes drill-ink-flow {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+@keyframes drill-ink-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--vermilion-line);
+  }
+  70% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+/* ==================================================================
+   三、组卷失败
+   ================================================================== */
+
+.drill-failure {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 40px;
+}
+
+.drill-fail {
+  position: relative;
+  width: min(640px, 100%);
+  padding: 32px 34px 24px;
+  background: var(--card-solid);
+  border: 1px solid var(--line-strong);
+  border-top: 3px solid var(--vermilion);
+  border-radius: 3px;
+  box-shadow: var(--shadow-md);
+}
+
+.drill-fail__stamp {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  width: 40px;
+  height: 52px;
+  border-radius: 3px;
+  font-size: 14px;
+  letter-spacing: 2px;
+  writing-mode: vertical-rl;
+  opacity: 0.8;
+}
+
+.drill-fail__title {
+  margin: 8px 0 10px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.drill-fail__message {
+  padding-right: 64px;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.drill-fail__hint {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-faint);
+}
+
+.drill-fail__detail {
+  display: -webkit-box;
+  margin-top: 12px;
+  padding: 10px 12px;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+  background: var(--paper-deep);
+  border-left: 2px solid var(--line-strong);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.drill-fail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.drill-fail__meta {
+  margin-top: 14px;
+}
+
+/* ==================================================================
+   朱砂小印（判分 / 成绩单 / 失败共用）
+   ================================================================== */
+
+.drill-stamp {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  line-height: 1;
+  color: var(--vermilion);
+  opacity: 0.92;
+  transform: rotate(-8deg);
+  user-select: none;
+  animation: ink-bloom 0.5s var(--ease-spring) both;
+}
+
+.drill-stamp--right {
+  color: var(--sage-deep);
+}
+
+[data-theme='dark'] .drill-stamp--right {
+  color: var(--sage);
+}
+
+.drill-stamp--wrong {
+  color: var(--vermilion);
+}
+
+/* ==================================================================
+   四、答题
+   ================================================================== */
+
+.drill-quiz {
+  width: min(780px, 100%);
+  margin: 0 auto;
+}
+
+.drill-quiz__top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+  scroll-margin-top: 20px;
+}
+
+.drill-quiz__counter {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.drill-quiz__counter b {
+  margin: 0 2px;
+  font-family: var(--font-word);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.drill-quiz__total {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.drill-quiz .drill-quiz__progress {
+  flex: 1;
+  min-width: 60px;
+  height: 4px;
+}
+
+.drill-quiz__end {
+  flex: none;
+}
+
+/* -------------------------------- 试卷 -------------------------------- */
+
+.drill-paper {
+  position: relative;
+  background: var(--card-solid);
+  border: 1px solid var(--line-strong);
+  border-top: 2px solid var(--ink-soft);
+  border-radius: 3px;
+  box-shadow: var(--shadow-lg);
+  transition: border-top-color var(--duration-base) var(--ease-out);
+}
+
+.drill-paper.is-correct {
+  border-top-color: var(--sage);
+}
+
+.drill-paper.is-wrong {
+  border-top-color: var(--vermilion);
+}
+
+.drill-paper__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 26px;
+  border-bottom: 1px solid var(--line);
+}
+
+.drill-paper__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.drill-paper__source {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+}
+
+.drill-paper__body {
+  position: relative;
+  padding: 26px 32px 28px 72px;
+}
+
+.drill-paper__body::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 48px;
+  width: 1px;
+  background: var(--vermilion-line);
+  opacity: 0.65;
+}
+
+.drill-paper__no {
+  position: absolute;
+  top: 30px;
+  left: 8px;
+  width: 30px;
+  font-family: var(--font-word);
+  font-size: 17px;
+  text-align: center;
+  color: var(--vermilion);
+}
+
+/* -------------------------------- 题干 -------------------------------- */
+
+.drill-prompt {
+  font-family: var(--font-display);
+  font-size: clamp(17px, 1.9vw, 20px);
+  line-height: 1.85;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+.drill-prompt--fill {
+  line-height: 2.15;
+}
+
+.drill-prompt__note {
+  margin-top: 14px;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--ink-faint);
+}
+
+.drill-blank {
+  display: inline-block;
+  min-width: 6.5em;
+  max-width: 100%;
+  margin: 0 4px;
+  padding: 0 4px 2px;
+  font-family: var(--font-word);
+  font-size: 0.96em;
+  text-align: center;
+  color: var(--vermilion-deep);
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid var(--ink-soft);
+  border-radius: 0;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+[data-theme='dark'] .drill-blank {
+  color: var(--vermilion);
+}
+
+.drill-blank::placeholder {
+  letter-spacing: 0.2em;
+  color: var(--ink-ghost);
+}
+
+.drill-blank:focus {
+  outline: none;
+  background: var(--vermilion-wash);
+  border-bottom-color: var(--vermilion);
+}
+
+.drill-blank.is-correct {
+  color: var(--sage-deep);
+  background: var(--sage-wash);
+  border-bottom-color: var(--sage);
+}
+
+[data-theme='dark'] .drill-blank.is-correct {
+  color: var(--sage);
+}
+
+.drill-blank.is-wrong {
+  color: var(--vermilion);
+  background: var(--vermilion-wash);
+  border-bottom-color: var(--vermilion);
+}
+
+.drill-fill-standalone {
+  display: flex;
+  margin-top: 16px;
+}
+
+/* -------------------------------- 选项 -------------------------------- */
+
+.drill-options {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.drill-option {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 14.5px;
+  line-height: 1.6;
+  text-align: left;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.drill-option:hover:not(:disabled) {
+  background: var(--paper-raised);
+  border-color: var(--ink-ghost);
+}
+
+.drill-option:disabled {
+  cursor: default;
+}
+
+.drill-option__letter {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  font-family: var(--font-word);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.drill-option__text {
+  min-width: 0;
+}
+
+.drill-option__mark {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.drill-option__key {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-ghost);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.drill-option.is-selected {
+  background: var(--vermilion-wash);
+  border-color: var(--vermilion-line);
+}
+
+.drill-option.is-selected .drill-option__letter {
+  color: var(--card-solid);
+  background: var(--vermilion);
+  border-color: var(--vermilion);
+}
+
+.drill-option.is-correct {
+  background: var(--sage-wash);
+  border-color: var(--sage);
+}
+
+.drill-option.is-correct .drill-option__letter {
+  color: var(--card-solid);
+  background: var(--sage);
+  border-color: var(--sage);
+}
+
+.drill-option.is-correct .drill-option__mark {
+  color: var(--sage-deep);
+}
+
+[data-theme='dark'] .drill-option.is-correct .drill-option__mark {
+  color: var(--sage);
+}
+
+.drill-option.is-wrong {
+  background: var(--vermilion-wash);
+  border-color: var(--vermilion);
+}
+
+.drill-option.is-wrong .drill-option__letter {
+  color: var(--card-solid);
+  background: var(--vermilion);
+  border-color: var(--vermilion);
+}
+
+.drill-option.is-wrong .drill-option__mark {
+  color: var(--vermilion);
+}
+
+.drill-option.is-muted {
+  opacity: 0.5;
+}
+
+/* ------------------------------ 判分前操作 ------------------------------ */
+
+.drill-quiz__hintbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.drill-quiz__keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ------------------------------- 判分反馈 ------------------------------- */
+
+.drill-feedback {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px dashed var(--line-strong);
+  animation: fade-up var(--duration-base) var(--ease-out) both;
+}
+
+.drill-feedback__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.drill-feedback__verdict {
+  flex: 1;
+  min-width: 0;
+}
+
+.drill-feedback__title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--sage-deep);
+}
+
+[data-theme='dark'] .drill-feedback__title {
+  color: var(--sage);
+}
+
+.drill-feedback__title.is-wrong {
+  color: var(--vermilion);
+}
+
+.drill-feedback__keys {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.drill-feedback__keys > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.drill-feedback__keys dt {
+  flex: none;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-ghost);
+}
+
+.drill-feedback__keys dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.drill-feedback__keys dd.is-correct {
+  font-family: var(--font-word);
+  font-size: 15px;
+  color: var(--sage-deep);
+}
+
+[data-theme='dark'] .drill-feedback__keys dd.is-correct {
+  color: var(--sage);
+}
+
+.drill-feedback__keys dd.is-wrong {
+  color: var(--vermilion);
+  text-decoration: line-through;
+  text-decoration-color: var(--vermilion-line);
+  text-decoration-thickness: 1px;
+}
+
+.drill-feedback__explain {
+  margin-top: 16px;
+  padding-left: 14px;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--ink-soft);
+  border-left: 2px solid var(--line-strong);
+}
+
+.drill-feedback__word {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.drill-feedback .drill-feedback__speak {
+  width: 26px;
+  height: 26px;
+  margin-left: -6px;
+  align-self: center;
+}
+
+.drill-feedback__term {
+  font-family: var(--font-word);
+  font-size: 16px;
+  color: var(--ink);
+}
+
+.drill-feedback__phonetic {
+  font-size: 11.5px;
+  color: var(--ink-ghost);
+}
+
+.drill-feedback__meaning {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.drill-feedback__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.drill-feedback__foot .hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ==================================================================
+   五、成绩单
+   ================================================================== */
+
+.drill-result {
+  width: min(880px, 100%);
+  margin: 0 auto;
+}
+
+.drill-report {
+  position: relative;
+  padding: 32px 38px 30px;
+  background: var(--card-solid);
+  border: 1px solid var(--line-strong);
+  border-top: 3px solid var(--ink-soft);
+  border-radius: 3px;
+  box-shadow: var(--shadow-md);
+}
+
+.drill-report__stamp {
+  position: absolute;
+  top: 26px;
+  right: 32px;
+}
+
+.drill-report__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 18px;
+  border-bottom: 3px double var(--line-strong);
+}
+
+.drill-report__title {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.drill-report__date {
+  padding-top: 6px;
+  padding-right: 66px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.drill-report__hero {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 34px;
+  align-items: center;
+  padding: 30px 0 26px;
+}
+
+.drill-report__score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.drill-report__number {
+  font-family: var(--font-word);
+  font-size: clamp(80px, 11vw, 118px);
+  line-height: 0.82;
+  letter-spacing: -0.045em;
+  color: var(--ink);
+  font-feature-settings: 'lnum' 1;
+}
+
+.drill-report__pct {
+  margin-left: 4px;
+  font-family: var(--font-word);
+  font-size: 26px;
+  letter-spacing: 0;
+  color: var(--ink-faint);
+}
+
+.drill-report__score-label {
+  flex-basis: 100%;
+  margin-top: 12px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+}
+
+.drill-report__comment {
+  padding-left: 24px;
+  border-left: 1px solid var(--vermilion-line);
+}
+
+.drill-report__comment-text {
+  margin: 8px 0 10px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.8;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+.drill-report__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.drill-report__stats > div {
+  padding: 16px 20px;
+  border-left: 1px solid var(--line);
+}
+
+.drill-report__stats > div:first-child {
+  padding-left: 0;
+  border-left: none;
+}
+
+.drill-report__stats dt {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+}
+
+.drill-report__stats dd {
+  margin-top: 4px;
+  font-family: var(--font-word);
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.drill-report__stats .drill-report__denom {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+.drill-report__stats .drill-report__duration {
+  font-family: var(--font-body);
+  font-size: 16px;
+}
+
+.drill-report__unfinished {
+  margin-top: 14px;
+}
+
+/* ------------------------------- 错题复盘 ------------------------------- */
+
+.drill-review {
+  margin-top: 28px;
+}
+
+.drill-review__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+}
+
+.drill-review__title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.drill-review__count {
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  color: var(--vermilion);
+}
+
+.drill-review__list {
+  border-top: 1px solid var(--line);
+}
+
+.drill-review__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.35fr) auto;
+  gap: 20px;
+  align-items: center;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.drill-review__word {
+  min-width: 0;
+}
+
+.drill-review__term-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.drill-review__term {
+  font-family: var(--font-word);
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.drill-review__phonetic {
+  font-size: 11px;
+  color: var(--ink-ghost);
+}
+
+.drill-review .drill-review__speak {
+  width: 24px;
+  height: 24px;
+  align-self: center;
+}
+
+.drill-review__meaning {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-faint);
+}
+
+.drill-review__answers {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.drill-review__answers > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.drill-review__answers dt {
+  flex: none;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  color: var(--ink-ghost);
+}
+
+.drill-review__answers dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.drill-review__answers dd.is-wrong {
+  color: var(--vermilion);
+  text-decoration: line-through;
+  text-decoration-color: var(--vermilion-line);
+}
+
+.drill-review__answers dd.is-correct {
+  font-family: var(--font-word);
+  font-size: 14px;
+  color: var(--sage-deep);
+}
+
+[data-theme='dark'] .drill-review__answers dd.is-correct {
+  color: var(--sage);
+}
+
+.drill-review__type {
+  align-self: center;
+}
+
+/* -------------------------------- 全对 --------------------------------- */
+
+.drill-perfect {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 26px;
+  padding: 20px 22px;
+  background: var(--sage-wash);
+  border: 1px solid var(--sage);
+  border-radius: 2px;
+}
+
+.drill-perfect .drill-perfect__stamp {
+  width: 44px;
+  height: 44px;
+  font-size: 17px;
+}
+
+.drill-perfect__title {
+  margin-bottom: 4px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* ------------------------------- 成绩单尾部 ------------------------------ */
+
+.drill-report__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 3px double var(--line-strong);
+}
+
+.drill-report__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.drill-report__note {
+  text-align: right;
+}
+
+/* ==================================================================
+   响应式
+   ================================================================== */
+
+@media (max-width: 1080px) {
+  .drill-setup {
+    grid-template-columns: minmax(0, 1fr) 310px;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 980px) {
+  .drill-setup {
+    grid-template-columns: 1fr;
+  }
+
+  .drill-aside {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .drill-sheet__head {
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 18px 16px;
+  }
+
+  .drill-sheet__tools {
+    justify-content: flex-start;
+    padding-top: 0;
+  }
+
+  .drill-word {
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 12px;
+    padding: 13px 16px;
+  }
+
+  .drill-word__meta {
+    grid-column: 2;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 14px;
+    padding-top: 0;
+    white-space: normal;
+  }
+
+  .drill-paper__head {
+    padding: 12px 18px;
+  }
+
+  .drill-paper__body {
+    padding: 22px 18px 22px 52px;
+  }
+
+  .drill-paper__body::before {
+    left: 34px;
+  }
+
+  .drill-paper__no {
+    top: 24px;
+    left: 2px;
+    width: 24px;
+    font-size: 15px;
+  }
+
+  .drill-quiz__top {
+    flex-wrap: wrap;
+    gap: 10px 14px;
+  }
+
+  .drill-quiz .drill-quiz__progress {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .drill-option {
+    grid-template-columns: 26px minmax(0, 1fr) 20px;
+    gap: 10px;
+    padding: 11px 12px;
+    font-size: 14px;
+  }
+
+  .drill-feedback__top {
+    gap: 14px;
+  }
+
+  .drill-draft {
+    flex-direction: column;
+    gap: 18px;
+    padding: 24px 20px 20px;
+  }
+
+  .drill-draft__seal {
+    flex-direction: row;
+    width: 44px;
+    height: 44px;
+    font-size: 15px;
+  }
+
+  .drill-draft__title {
+    margin: 6px 0 14px;
+    font-size: 22px;
+  }
+
+  .drill-fail {
+    padding: 26px 20px 20px;
+  }
+
+  .drill-fail__message {
+    padding-right: 0;
+  }
+
+  .drill-fail__stamp {
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 44px;
+    font-size: 12px;
+  }
+
+  .drill-report {
+    padding: 22px 20px;
+  }
+
+  .drill-report__stamp {
+    top: 16px;
+    right: 18px;
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
+
+  .drill-report__date {
+    padding-right: 56px;
+  }
+
+  .drill-report__hero {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 22px 0;
+  }
+
+  .drill-report__comment {
+    padding-top: 16px;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: none;
+  }
+
+  .drill-report__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .drill-report__stats > div {
+    padding: 12px 16px;
+  }
+
+  .drill-report__stats > div:nth-child(odd) {
+    padding-left: 0;
+    border-left: none;
+  }
+
+  .drill-report__stats > div:nth-child(even) {
+    border-left: 1px solid var(--line);
+  }
+
+  .drill-report__stats > div:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
+
+  .drill-review__item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 16px;
+  }
+
+  .drill-review__answers {
+    grid-column: 1 / -1;
+  }
+
+  .drill-review__type {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .drill-report__foot {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .drill-report__note {
+    text-align: left;
+  }
+}
+
+@media (max-width: 520px) {
+  /* Wordbook.css 在 520px 下会把所有 .view-actions 拉满、按钮 stretched；
+     这里在特训页范围内收回，让 badge 与「设置」紧凑成一组。 */
+  .drill-head .drill-head__actions {
+    width: auto;
+    justify-content: flex-start;
+    gap: 10px;
+    padding-bottom: 0;
+  }
+
+  .drill-head .drill-head__actions .btn {
+    flex: 0 0 auto;
+    padding-inline: 10px;
+  }
+
+  .drill-quiz__counter b {
+    font-size: 18px;
+  }
+
+  .drill-option__key {
+    display: none;
+  }
+
+  .drill-feedback__foot {
+    justify-content: space-between;
+  }
+
+  .drill-stamp {
+    width: 42px;
+    height: 42px;
+    font-size: 16px;
+  }
+
+  .drill-report__number {
+    font-size: 76px;
+  }
+
+  .drill-empty__actions .btn {
+    width: 100%;
+  }
+}

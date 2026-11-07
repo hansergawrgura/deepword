@@ -1,0 +1,418 @@
+/* ==================================================================
+   词库
+   ================================================================== */
+
+.wordbook-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.wordbook-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1 1 260px;
+  max-width: 360px;
+  height: 40px;
+  padding: 0 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--ink-faint);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.wordbook-search:focus-within {
+  border-color: var(--vermilion);
+  box-shadow: 0 0 0 3px var(--vermilion-wash);
+}
+
+.wordbook-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.wordbook-search input::placeholder {
+  color: var(--ink-ghost);
+}
+
+.wordbook-search input[type='search']::-webkit-search-cancel-button {
+  display: none;
+}
+
+.wordbook-search__clear {
+  color: var(--ink-faint);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.wordbook-search__clear:hover {
+  color: var(--vermilion);
+}
+
+.wordbook-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+
+.wordbook-filters .chip {
+  padding: 5px 11px;
+  font-size: 12.5px;
+}
+
+.wordbook-filters__count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.65;
+  margin-left: 1px;
+}
+
+.wordbook-sort {
+  flex: none;
+}
+
+.wordbook-sort .select {
+  width: auto;
+  min-width: 132px;
+  height: 40px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: 13px;
+  background-color: var(--card);
+}
+
+/* --------------------------------- 表格 --------------------------------- */
+.wordbook-table {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.wordbook-table__head,
+.wordbook-row {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1.25fr) minmax(200px, 2fr) 90px 92px 72px 80px;
+  align-items: center;
+  column-gap: 18px;
+  padding: 0 20px;
+}
+
+.wordbook-table__head {
+  padding-top: 11px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper-deep) 55%, transparent);
+}
+
+.wordbook-table__head span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.wordbook-row {
+  padding-top: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--line);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.wordbook-row:last-child {
+  border-bottom: none;
+}
+
+.wordbook-row:hover {
+  background: color-mix(in srgb, var(--vermilion-wash) 55%, transparent);
+}
+
+.wordbook-row__term {
+  min-width: 0;
+}
+
+.wordbook-row__term strong {
+  display: block;
+  font-family: var(--font-word);
+  font-size: 17.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.wordbook-row__meta {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.wordbook-row__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.wordbook-row__tags .badge {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+
+.wordbook-row__meaning {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.wordbook-row__badges {
+  display: contents;
+}
+
+.wordbook-row__status {
+  justify-self: start;
+}
+
+.wordbook-row__due {
+  font-size: 12px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.wordbook-row__wrong {
+  justify-self: start;
+}
+
+.wordbook-row__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  opacity: 0.55;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.wordbook-row:hover .wordbook-row__actions,
+.wordbook-row:focus-within .wordbook-row__actions {
+  opacity: 1;
+}
+
+.wordbook-row__delete:hover {
+  color: var(--vermilion);
+  border-color: var(--vermilion-line);
+  background: var(--vermilion-wash);
+}
+
+.wordbook-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.wordbook-empty {
+  margin-top: 8px;
+}
+
+.wordbook-empty .view-actions {
+  justify-content: center;
+  margin-top: 10px;
+}
+
+/* -------------------------------- 编辑表单 ------------------------------- */
+.word-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* -------------------------------- 导入 --------------------------------- */
+.word-import {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.word-import__file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  min-height: 38px;
+  padding: 7px 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.word-import__file:hover {
+  border-color: var(--vermilion-line);
+  color: var(--vermilion);
+}
+
+.word-import__file input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.word-import__textarea {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.word-import__preview {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-faint);
+  word-break: break-word;
+}
+
+/* ------------------------------- 响应式 --------------------------------- */
+@media (max-width: 1080px) {
+  .wordbook-table__head,
+  .wordbook-row {
+    grid-template-columns: minmax(160px, 1.15fr) minmax(180px, 1.8fr) 86px 82px 66px;
+  }
+
+  .wordbook-table__head span:nth-child(4),
+  .wordbook-row__due {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .wordbook-toolbar {
+    gap: 10px;
+  }
+
+  .wordbook-search {
+    max-width: none;
+  }
+
+  .wordbook-filters {
+    order: 3;
+    flex-basis: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .wordbook-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .wordbook-sort {
+    margin-left: auto;
+  }
+
+  .wordbook-table {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .wordbook-table__head {
+    display: none;
+  }
+
+  .wordbook-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'term actions'
+      'meaning meaning'
+      'badges badges';
+    row-gap: 8px;
+    column-gap: 12px;
+    margin-bottom: 12px;
+    padding: 16px 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--card);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .wordbook-row:last-child {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .wordbook-row:hover {
+    background: var(--card);
+  }
+
+  .wordbook-row__term {
+    grid-area: term;
+  }
+
+  .wordbook-row__meaning {
+    grid-area: meaning;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+
+  .wordbook-row__badges {
+    grid-area: badges;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    margin-top: 4px;
+  }
+
+  .wordbook-row__due {
+    display: block;
+    font-size: 11.5px;
+  }
+
+  .wordbook-row__actions {
+    grid-area: actions;
+    opacity: 1;
+    align-self: start;
+  }
+
+  .wordbook-row__meaning:empty {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .wordbook .view-actions {
+    width: 100%;
+  }
+
+  .wordbook .view-actions .btn {
+    flex: 1;
+    padding-inline: 10px;
+  }
+}
