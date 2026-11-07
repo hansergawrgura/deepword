@@ -1,7 +1,8 @@
 import { useMemo, type JSX } from 'react';
 import { useApp } from '../state/AppState';
 import type { ViewId } from '../types';
-import { getMistakeList, getOverview } from '../lib/stats';
+import { getOverview } from '../lib/stats';
+import { APP_VERSION } from '../lib/version';
 import {
   IconBook,
   IconCards,
@@ -10,7 +11,6 @@ import {
   IconMoon,
   IconSliders,
   IconSun,
-  IconTarget,
   type IconProps,
 } from './ui/icons';
 import './Sidebar.css';
@@ -31,7 +31,6 @@ interface NavEntry {
 const NAV: NavEntry[] = [
   { id: 'dashboard', label: '今日', shortLabel: '今日', latin: 'TODAY', icon: IconHome },
   { id: 'study', label: '学习', shortLabel: '学习', latin: 'STUDY', icon: IconCards },
-  { id: 'drill', label: '错题特训', shortLabel: '特训', latin: 'DRILL', icon: IconTarget },
   { id: 'wordbook', label: '词库', shortLabel: '词库', latin: 'WORDBOOK', icon: IconBook },
   { id: 'settings', label: '设置', shortLabel: '设置', latin: 'SETTINGS', icon: IconSliders },
 ];
@@ -39,14 +38,9 @@ const NAV: NavEntry[] = [
 export function Sidebar({ current, onNavigate }: SidebarProps) {
   const { data, actions } = useApp();
   const overview = useMemo(() => getOverview(data), [data]);
-  const unresolved = useMemo(
-    () => getMistakeList(data).filter((item) => item.correctStreak < 2).length,
-    [data],
-  );
 
   const badgeFor = (id: ViewId): number | undefined => {
     if (id === 'study') return overview.dueCount + (overview.todayReviewed === 0 ? Math.min(5, overview.newCount) : 0);
-    if (id === 'drill') return unresolved;
     if (id === 'wordbook') return data.words.length;
     return undefined;
   };
@@ -124,7 +118,7 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
         </button>
 
         <p className="sidebar__version">
-          <span>词渊 · v1.0</span>
+          <span>词渊 · v{APP_VERSION}</span>
           <span>本地存储</span>
         </p>
       </div>

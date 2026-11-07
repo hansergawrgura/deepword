@@ -79,6 +79,40 @@ export interface LLMConnectionResult {
   model?: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* 模型列表（Provider 管理用）                                          */
+/* ------------------------------------------------------------------ */
+
+export interface ModelInfo {
+  /** model id，例如 gpt-4o-mini */
+  id: string;
+  /** 服务商给的展示名（Anthropic 有；OpenAI 兼容通常没有） */
+  displayName?: string;
+  /** Anthropic lifecycle：active / deprecated / retired；其他服务商可能没有 */
+  lifecycle?: string;
+  /** 服务商声明的最大输出 tokens（Anthropic 有） */
+  maxTokens?: number;
+}
+
+export interface FetchModelsResult {
+  models: ModelInfo[];
+  /** 非致命提示，例如返回为空时引导手动填写 */
+  warning?: string;
+}
+
+/** 流式请求选项（讲解 / 互译判分 / 未来 chat 共用）。 */
+export interface StreamChatOptions {
+  signal?: AbortSignal;
+  maxTokens?: number;
+  temperature?: number;
+  /** 每收到一段文本就回调一次 */
+  onToken?: (token: string) => void;
+  /** 强制关闭思考（讲解 / 判分用）；默认遵 from settings.thinkingMode */
+  noThink?: boolean;
+  /** 覆盖默认超时 */
+  timeoutMs?: number;
+}
+
 export interface RawExercisePayload {
   exercises?: unknown;
 }

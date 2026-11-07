@@ -6,17 +6,15 @@ import Dashboard from './components/Dashboard';
 import WordbookView from './components/WordbookView';
 import SettingsView from './components/SettingsView';
 import StudyView from './components/study/StudyView';
-import DrillView from './components/drill/DrillView';
 import { ToastStack } from './components/ui/ToastStack';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import './App.css';
 
-const VIEWS: ViewId[] = ['dashboard', 'study', 'drill', 'wordbook', 'settings'];
+const VIEWS: ViewId[] = ['dashboard', 'study', 'wordbook', 'settings'];
 
 const VIEW_TITLES: Record<ViewId, string> = {
   dashboard: '今日',
   study: '学习',
-  drill: '错题特训',
   wordbook: '词库',
   settings: '设置',
 };
@@ -72,7 +70,6 @@ function Shell() {
           <div className="app-view">
             {view === 'dashboard' && <Dashboard navigate={navigate} />}
             {view === 'study' && <StudyView navigate={navigate} />}
-            {view === 'drill' && <DrillView navigate={navigate} />}
             {view === 'wordbook' && <WordbookView />}
             {view === 'settings' && <SettingsView />}
           </div>

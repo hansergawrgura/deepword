@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { AppData, Attempt, DailyStat, Mistake, Word } from '../types';
-import { DATA_VERSION } from '../types';
+import { DATA_VERSION, DEFAULT_PRACTICE_SETTINGS } from '../types';
 import { createCard, gradeCard } from './srs';
 import { dayKey } from './utils';
-import { DEFAULT_LLM_SETTINGS } from './storage';
+import { createInitialProviders } from './providerModel';
 import {
   accuracyForWord,
   computeStreak,
@@ -79,7 +79,9 @@ function fixture(): AppData {
       attempt('w2', false, NOW - 4 * DAY),
     ],
     mistakes,
-    settings: { ...DEFAULT_LLM_SETTINGS },
+    providers: createInitialProviders(NOW),
+    activeProviderId: null,
+    practice: { ...DEFAULT_PRACTICE_SETTINGS },
     theme: 'light',
     stats: {
       daily: {

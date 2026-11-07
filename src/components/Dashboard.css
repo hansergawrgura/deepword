@@ -325,6 +325,19 @@
   background: var(--line);
 }
 
+/* 有未完成的轮次时，页头给出「接着来」的提示。 */
+.dash-hero__resume {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 14px;
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--vermilion-wash);
+  color: var(--vermilion-deep);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
 /* -------------------------------- 面板 ---------------------------------- */
 .dash-panel {
   padding: 24px 26px;
@@ -744,6 +757,198 @@
   line-height: 1.6;
 }
 
+/* ------------------------------- 薄弱分析 -------------------------------- */
+.dash-weakness__skills {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+.dash-weakness__skill {
+  display: grid;
+  grid-template-columns: 4.2em minmax(0, 1fr) 3.2em 3.4em;
+  grid-template-areas: 'label bar acc count';
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dash-weakness__skill-label {
+  grid-area: label;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dash-weakness__skill[data-weakest='true'] .dash-weakness__skill-label {
+  color: var(--vermilion);
+  font-weight: 600;
+}
+
+/* 最弱技能：左侧朱砂引线 + 朱砂标签，一眼锁定短板。 */
+.dash-weakness__skill[data-weakest='true'] {
+  box-shadow: inset 2px 0 0 var(--vermilion);
+  padding-left: 8px;
+}
+
+.dash-weakness__skill-bar {
+  grid-area: bar;
+  display: block;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--paper-deep);
+  box-shadow: inset 0 0 0 1px var(--line);
+  overflow: hidden;
+}
+
+.dash-weakness__skill-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink-ghost);
+  transition: width var(--duration-slow) var(--ease-out);
+}
+
+.dash-weakness__skill[data-tone='weak'] .dash-weakness__skill-bar > span {
+  background: var(--vermilion);
+}
+
+.dash-weakness__skill[data-tone='mid'] .dash-weakness__skill-bar > span {
+  background: var(--gold);
+}
+
+.dash-weakness__skill[data-tone='strong'] .dash-weakness__skill-bar > span {
+  background: var(--sage);
+}
+
+.dash-weakness__skill-acc {
+  grid-area: acc;
+  justify-self: end;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.dash-weakness__skill-count {
+  grid-area: count;
+  justify-self: end;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-ghost);
+}
+
+.dash-weakness__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.dash-weakness__subtitle {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+}
+
+.dash-weakness__note {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-faint);
+  line-height: 1.7;
+}
+
+.dash-weakness__word-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+}
+
+.dash-weakness__word {
+  display: grid;
+  grid-template-columns: minmax(58px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  width: 100%;
+  padding: 9px 8px;
+  border-radius: var(--radius-xs);
+  text-align: left;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.dash-weakness__word:hover {
+  background: var(--vermilion-wash);
+}
+
+.dash-weakness__word-term {
+  font-family: var(--font-word);
+  font-size: 15px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-weakness__word-meaning {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dash-weakness__word-meta {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+}
+
+.dash-weakness__word-acc {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-faint);
+}
+
+.dash-weakness__focus {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  align-self: start;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--vermilion);
+  border-radius: var(--radius-sm);
+  background: var(--paper-raised);
+}
+
+.dash-weakness__focus-label {
+  flex: none;
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--vermilion);
+  letter-spacing: 0.06em;
+}
+
+.dash-weakness__focus-text {
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--ink-soft);
+}
+
+.dash-weakness__empty {
+  flex-wrap: wrap;
+}
+
+.dash-weakness__empty-cta {
+  margin-left: auto;
+}
+
 /* ------------------------------- 响应式 --------------------------------- */
 @media (max-width: 1120px) {
   .dash-grid {
@@ -754,6 +959,16 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     align-items: start;
+  }
+
+  /* 薄弱分析在窄栏里偏挤：这一档横跨整行，内部回到两栏排布。 */
+  .dash-weakness {
+    grid-column: 1 / -1;
+  }
+
+  .dash-weakness__split {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 20px;
   }
 
   .dash-note {
@@ -865,5 +1080,35 @@
   .dash-weak__row {
     grid-template-columns: minmax(64px, auto) minmax(0, 1fr) auto;
     gap: 4px 8px;
+  }
+
+  .dash-weakness__split {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dash-weakness__skill {
+    grid-template-columns: 4em minmax(0, 1fr) 3.2em;
+    grid-template-areas:
+      'label bar acc'
+      'count count count';
+    column-gap: 8px;
+    row-gap: 4px;
+  }
+
+  .dash-weakness__skill-count {
+    justify-self: start;
+  }
+
+  .dash-weakness__word {
+    grid-template-columns: minmax(56px, auto) minmax(0, 1fr) auto;
+    gap: 2px 8px;
+  }
+
+  .dash-weakness__empty-cta {
+    margin-left: 0;
+    width: 100%;
   }
 }

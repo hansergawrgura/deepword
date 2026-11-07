@@ -1,4 +1,4 @@
-/** 统计与错题分析：仪表盘、错题本、AI 特训选词都从这里取数。 */
+/** 统计与错题分析：仪表盘、词库页从这里取数。 */
 
 import type {
   AppData,
@@ -157,7 +157,7 @@ export function accuracyForWord(attempts: Attempt[], wordId: string, sample = 10
   return percent(relevant.filter((a) => a.correct).length, relevant.length);
 }
 
-/** 把整个词库映射为带学习进度的列表，供词库页 / 错题本 / 特训选词使用。 */
+/** 把整个词库映射为带学习进度的列表，供词库页 / 错题本使用。 */
 export function getWordProgressList(data: AppData, now = Date.now()): WordProgress[] {
   const byWord = new Map<string, Attempt[]>();
   for (const attempt of data.attempts) {

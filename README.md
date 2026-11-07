@@ -2,17 +2,15 @@
 
 > 以错题为师，以温故为舟。
 
-一个**本地优先**的 LLM 背单词 Web 应用。用闪卡做间隔重复，把答错的词收进错题本，再让大模型读着你的错误史，为你重新命题 —— 每一道题都针对你真正没记住的地方。
+一个**本地优先**的 LLM 背单词 Web 应用。学习流程按「一轮」推进：先过新词闸门，再混合出题练习 6 个技能，随后按薄弱度复习，最后小结收束 —— 答错的词由大模型讲解为什么错、怎么记。
 
-前端为 React 19 + Vite + TypeScript，数据只保存在浏览器 localStorage，API 兼容 OpenAI 与 Anthropic 两种协议，可直接使用 DeepSeek、Moonshot、硅基流动、Ollama 等兼容服务。
+前端为 React 19 + Vite 6 + TypeScript，数据只保存在浏览器 localStorage。AI 请求不再由浏览器直接连接厂商，而是经**同源本地代理**（`/api/llm/forward`）转发，兼容 OpenAI 与 Anthropic 两种协议，可用 DeepSeek、通义千问、Kimi、智谱、Ollama 等兼容服务。
 
 ## 界面预览
 
-| 今日 · 仪表盘 | 闪卡 · 温故 |
+| 今日 · 仪表盘 | 学习 · 一轮 |
 | --- | --- |
-| ![今日仪表盘](docs/screenshots/dashboard.jpg) | ![闪卡学习](docs/screenshots/study.jpg) |
-| **错题特训 · 选词与命题** | **本地兜底 · 例句填空** |
-| ![错题特训](docs/screenshots/drill-setup.jpg) | ![本地兜底练习](docs/screenshots/drill-quiz.jpg) |
+| ![今日仪表盘](docs/screenshots/dashboard.jpg) | ![学习页](docs/screenshots/study.jpg) |
 
 | 词库 | 设置 |
 | --- | --- |
@@ -21,8 +19,8 @@
 <table>
   <tr>
     <td align="center"><img src="docs/screenshots/mobile-dashboard.jpg" width="260" alt="移动端仪表盘" /><br /><sub>移动端 · 今日</sub></td>
-    <td align="center"><img src="docs/screenshots/mobile-study.jpg" width="260" alt="移动端闪卡" /><br /><sub>移动端 · 学习</sub></td>
-    <td align="center"><img src="docs/screenshots/study-back.jpg" width="260" alt="闪卡背面" /><br /><sub>闪卡背面 · 释义与例句</sub></td>
+    <td align="center"><img src="docs/screenshots/mobile-study.jpg" width="260" alt="移动端学习" /><br /><sub>移动端 · 学习</sub></td>
+    <td align="center"><img src="docs/screenshots/study-back.jpg" width="260" alt="词笺背面" /><br /><sub>闸门词笺背面 · 释义与例句</sub></td>
   </tr>
 </table>
 
@@ -30,84 +28,142 @@
 
 ## 功能
 
-- **闪卡 + SRS 间隔重复**：四档自评（没记住 / 有点模糊 / 记住了 / 太简单），SM-2 变体排程；支持键盘 `Space` 翻面、`1-4` 评分、发音朗读。
+- **统一学习流程**：闸门 → 新词多模块出题 → 每轮必复习 → 小结 → 继续下一轮。一轮 = 新词 N 个（默认 1，可调 1~10；每词 4~8 题，默认 6）→ 复习 4~6 词（题量 `词数～2×词数`，默认 10）→ 小结 → 点「继续」下一轮；进度存在本机，中途退出可恢复。
+- **新词闪卡闸门**：新词先问「不认识 / 掌握」；点掌握翻面看释义并追问确认，确认即永久掌握、退出学习与复习；点不认识直接出题，第 1 题反馈附完整词条信息。
+- **6 种题型**：英选中 `en2zh` / 中选英 `zh2en` / 拼写 `spell` / 听音 `listen` / 连词成句 `sentence` / 中英互译 `translate`，全部本地生成、离线可用；听音题用浏览器 TTS（没有英文语音就不出），互译题需要配置 AI（没配就不出）。
+- **AI 讲解与互译判分（流式）**：答错时流式讲解（错因 + 记忆点 + 改进），不自动跳题；答对给鼓励语并按设置自动跳下一题；互译每题判三档 `perfect` / `good` / `poor`，`poor` 要读完讲解才能继续；AI 不可用时降级为本地解析，不阻塞作答。
+- **掌握判定**：连续 3 次全对 + 覆盖 ≥2 技能 + 14 天无错 + 分布 ≥2 轮次，自动标为掌握；掌握词退出学习与复习队列。
+- **薄弱分析（6 维度）**：从作答记录现算 6 个技能的正确率、最弱词与建议重点；复习选词与出题技能都按薄弱度优先。
+- **浏览器 TTS**：用浏览器内置语音朗读单词（可选英文语音、调语速、自动播放），零依赖零成本；没有可用英文语音时自动不出听音题。
 - **错题本**：记录每个词的错误次数、连续答对、最近错因与题型；按「待攻克 / 已连对」排序。
-- **LLM 针对性出题**：从错题中选词，把词义、例句、错因、近期正确率交给模型，生成四选一、例句填空、用法辨析、句子纠错等**可自动判分**的练习；逐题判分、中文解析、结果复盘。
-- **本地兜底题库**：没有配置 API Key 或调用失败时，自动改用词库自身生成练习，离线也能刷。
+- **多 provider 管理**：可保存多份 OpenAI 兼容 / Anthropic 兼容配置（名称、协议、厂商、Base URL、API Key、模型白名单、默认模型、温度、最大输出、思考开关，最多 20 份）；随时切换「当前使用」；可从服务商拉取模型列表并勾选保留；支持连通性测试。
 - **词库管理**：内置 190 个 CET-4 / CET-6 / 考研 / 雅思高频词；支持搜索、按学习状态筛选、排序、添加/编辑/删除、JSON 导入导出。
-- **仪表盘**：到期卡片、今日进度、近七日正确率、连续学习天数、28 天热力图、错题待攻克、掌握度分布。
-- **设置**：OpenAI 兼容 / Anthropic 双协议，Base URL、模型、Key、温度、最大 Tokens 配置，连接测试；完整备份导入导出；昼读 / 夜读主题。
-- **数据自持**：无后端、无账号、无埋点。单词、错题、API Key 都只存在当前浏览器的 localStorage 中。
+- **仪表盘**：待复习（按薄弱度）、今日进度、近七日正确率、连续学习天数、28 天热力图、薄弱分析面板、错题待攻克、掌握度分布。
+- **设置**：多份模型配置的增删改与切换、模型列表勾选、连通性测试、思考开关；**练习设置**（每轮新词数、每词题量、每轮复习词数、每轮复习题量、答对自动跳转、自动讲解、发音语速与英文语音选择）；完整备份导入导出；昼读 / 夜读主题。
+- **数据自持**：无云端后端、无账号、无埋点。单词、错题、配置与 API Key 都只存在当前浏览器的 localStorage 中；本地代理只转发请求，不保存 Key、不记录请求。
+- **本地代理**：应用已不是纯静态站点。开发与生产都需要在本机起一个进程（dev 由 Vite 提供内置代理；prod 由 `pnpm start` 单进程托管 `dist/` 与 `/api`），AI 请求才能发往厂商。
+
+## 学习流程
+
+学习按「一轮」推进，单页流程：计划 → 闸门 → 出题 → 复习 → 小结。
+
+**一轮的构成**（默认值可在「设置 → 练习设置」里改）：
+
+1. **闸门**：本轮的新词逐个先问「不认识 / 掌握」。点「掌握」翻面看释义并再问一次「确认掌握？」，确认即永久出队；点「不认识」直接出题，第 1 题的反馈附完整词条信息。
+2. **新词出题**：新词默认 1 个（练习设置里可调 1~10），每个新词 4~8 题（默认 6），尽量覆盖 6 种题型。
+3. **复习出题**：每轮必做，复习 4~6 词（默认 6），题量落在 `复习词数 ～ 2×复习词数`（默认 10），按薄弱度优先选词。
+4. **小结**：本轮正确率、技能分布与「需要再看一眼」的词（含讲解摘要）。
+5. **继续**：点「继续」进入下一轮；中途退出后可从「继续这一轮」恢复。
+
+**反馈规则**：
+
+- 答对：给一句本地鼓励语，按设置**自动跳下一题**（默认 3 秒；可在练习设置里改成 5 秒或手动）。
+- 答错：**不自动跳题**，等流式讲解（错因 + 记忆点 + 改进）读完再点「下一题」。
+- 互译：判三档 `perfect` / `good` / `poor`；判为 `poor` 时**必须先点「我看完了」确认**才能继续。
+- 讲解与改进建议写入作答记录，**本轮小结可以回看**，之后也能在作答记录里查到。
 
 ## 快速开始
 
 ```bash
 pnpm install
-pnpm dev        # http://127.0.0.1:5173
+pnpm dev        # http://127.0.0.1:5173（Vite 内置本地代理）
 ```
 
-生产构建与预览：
+生产构建与运行：
 
 ```bash
 pnpm build
-pnpm preview
+pnpm start      # http://127.0.0.1:8787（单进程托管 dist + /api）
 ```
+
+- `PORT` 可改端口（默认 `8787`）；`HOST` 只允许回环地址（默认 `127.0.0.1`，仅接受 `127.0.0.1` / `localhost` / `::1`）。
+- `pnpm preview` 只预览静态产物，不含 `/api` 代理，AI 功能不可用；需要 AI 时请用 `pnpm dev` 或 `pnpm start`。
 
 测试与类型检查：
 
 ```bash
-pnpm test       # vitest：129 个用例，覆盖 SRS / 统计 / 会话 / 存储 / 本地出题 / LLM 解析与校验
+pnpm test       # vitest：384 个用例（学习流程 124 / LLM 147 / 本地代理 14 / 存储 34 / SRS 12 / 统计 11 / 本地兜底出题 24 / Provider 配置层 12 / 模型行合并 6）
 pnpm typecheck
 ```
 
 ## 配置大模型
 
-打开左下角「设置 → 模型连接」：
+打开「设置 → 模型连接」，可以保存**多份配置**；同一时间只有「当前使用」的一份参与出题与判分。
 
-| 协议 | Base URL 示例 | 模型示例 |
-| --- | --- | --- |
-| OpenAI 兼容 | `https://api.openai.com/v1` | `gpt-4o-mini` |
-| OpenAI 兼容（DeepSeek） | `https://api.deepseek.com/v1` | `deepseek-chat` |
-| OpenAI 兼容（Moonshot） | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
-| OpenAI 兼容（Ollama 本地） | `http://localhost:11434/v1` | `qwen2.5:7b` |
-| Anthropic | `https://api.anthropic.com/v1` | `claude-sonnet-4-5` |
+新增配置的典型流程：选择厂商（可一键「填入预设」）→ 确认协议与 Base URL → 填 API Key → 「拉取模型列表」勾选要保留的模型 → 「测试连接」→ 保存 → 设为当前使用。
 
-- 填写到版本号（如 `/v1`）即可，程序会自动拼接 `/chat/completions` 或 `/messages`。
-- 本地 Ollama 可以不填 API Key；若遇到跨域错误，需要允许来源（例如设置 `OLLAMA_ORIGINS=*`）。
-- Anthropic 浏览器直连会自动携带 `anthropic-dangerous-direct-browser-access: true`。
-- 可先点「测试连接」验证；出题失败时页面会给出原因并可一键改用本地题库。
+| 厂商 | 协议 | Base URL 示例 | 模型示例 |
+| --- | --- | --- | --- |
+| OpenAI | OpenAI 兼容 | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| DeepSeek | OpenAI 兼容 | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| 通义千问 / DashScope | OpenAI 兼容 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| Ollama 本地 | OpenAI 兼容 | `http://localhost:11434/v1` | `qwen2.5:7b` |
+| Kimi / Moonshot | OpenAI 兼容 | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+| 智谱 GLM | OpenAI 兼容 | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
+| 硅基流动 | OpenAI 兼容 | `https://api.siliconflow.cn/v1` | `deepseek-ai/DeepSeek-V3` |
+| MiniMax | OpenAI 兼容 | `https://api.minimax.chat/v1` | `MiniMax-Text-01` |
+| Anthropic | Anthropic | `https://api.anthropic.com/v1` | `claude-sonnet-4-5` |
+| 火山方舟 / Ark | Anthropic | `https://ark.cn-beijing.volces.com/api/coding` | `deepseek-v4.1-flash`（以套餐模型列表为准） |
 
-> **安全提示**：这是本地个人工具，API Key 保存在浏览器 localStorage 中。出于成本与安全考虑，不建议把带 Key 的页面部署到公网。请勿在公共电脑上保存 Key，并定期轮换。
+- Base URL 填到版本号（如 `/v1`）即可，程序会自动拼接 `/chat/completions` 或 `/messages`；Anthropic 兼容网关也可以只填厂商前缀（如火山方舟 `/api/coding`、DeepSeek `/anthropic`），程序会自动补齐 `/v1/messages`；只填主机时按协议补 `/v1/...`。
+- Anthropic 协议的请求会同时携带 `x-api-key` 与 `Authorization: Bearer`，以兼容只用 Bearer 鉴权的网关（如火山方舟 Ark）；官方 `api.anthropic.com` 仍只发 `x-api-key`。
+- 本地 Ollama 可以不填 API Key；其他远端接口通常必填，Anthropic 必填。
+- **模型列表**：首次拉取且白名单为空时默认全选；再次拉取保留旧勾选，服务端新出现或此前未勾选的模型默认不勾选；本次未返回的旧模型标「已下线」但仍可保留；始终可以手动添加 model id。默认 model 不受白名单限制。
+- **测试连接**：发一次极小请求（`max_tokens: 1`，强制关闭思考），显示成功 / 失败、延迟、模型或可操作原因；空回复也算成功。
+- **思考开关**：「尽量关闭」会按厂商注入关闭思考的参数（不同厂商参数不同）；部分模型不支持关闭，界面会提示「可能不生效」，请以实际返回为准。
+- 出题失败时页面会给出原因，并可一键改用本地题库。
 
-## 浏览器的跨域限制（CORS）
+> **安全提示**：这是本地个人工具，API Key 保存在浏览器 localStorage 中。请求由本机代理转发，代理不保存 Key；但出于成本与安全考虑，不建议把带 Key 的页面部署到公网。请勿在公共电脑上保存 Key，并定期轮换。
 
-应用直接从浏览器请求你配置的接口地址，因此目标服务必须允许跨域。如果连接测试失败：
+## 本地代理
 
-1. 确认 Base URL、模型名与 Key 正确；
-2. 确认服务商允许浏览器直连（部分厂商默认禁止）；
-3. 使用本地 Ollama / LM Studio / 自建网关，或通过自己的反向代理转发请求。
+浏览器不再直接连接厂商域名，所有 LLM 请求都发往同源的 `POST /api/llm/forward`，由本机的**零依赖 Node 代理**转发：
+
+- 开发：`pnpm dev` 时由 Vite middleware 提供 `/api`；
+- 生产：`pnpm build && pnpm start` 时由 `server/index.mjs` 同时托管 `dist/` 与 `/api`。
+
+代理约束与行为：
+
+- 只监听 `127.0.0.1` 等回环地址（`HOST` 非回环会拒绝启动），不对外暴露；
+- 只允许 `http/https` 上游，只转发请求头白名单，显式剥离 `Origin` / `Referer` / `Cookie`；
+- 不跟随重定向（`redirect: 'manual'`）、不缓存，不保存也不记录 Key 与请求内容；
+- 请求体上限 1 MB；上游连接超时 20s、总超时 90s；客户端断开即中止上游。
+
+代理没启动（或使用纯静态部署）时：设置页「测试连接」会失败，AI 讲解与互译判分自动降级为本地解析；学习、词库、备份等本地功能不受影响。
 
 ## 项目结构
 
 ```
+server/
+├── proxy.mjs                # 零依赖本地代理：/api/health、/api/llm/forward、Vite 中间件、静态托管
+├── proxy.test.mjs           # 代理线协议单测（透传 / 白名单 / 超时 / 限流 / 断连等）
+└── index.mjs                # 生产入口：托管 dist/ + /api（默认 127.0.0.1:8787）
+
 src/
 ├── types.ts                 # 领域类型（唯一契约来源）
 ├── App.tsx                  # 路由（hash）+ 应用外壳
 ├── state/AppState.tsx       # 全局数据、写操作、持久化、Toast
 ├── lib/
-│   ├── srs.ts               # SM-2 变体记忆排程
-│   ├── session.ts           # 学习队列
+│   ├── srs.ts               # SM-2 变体记忆排程（数据层保留）
 │   ├── stats.ts             # 仪表盘、错题、薄弱词统计
-│   ├── storage.ts           # localStorage / 备份导入导出 / 清洗
-│   ├── fallbackExercises.ts # 本地兜底出题
-│   └── llm/                 # OpenAI 兼容 + Anthropic 传输、提示词、校验
+│   ├── storage.ts           # localStorage v2 / v1 迁移 / 备份导入导出 / 清洗
+│   ├── providerModel.ts     # provider 配置、当前生效派生、厂商预设与推断
+│   ├── fallbackExercises.ts # 本地兜底出题（数据层保留，供兼容与测试）
+│   ├── practice.ts          # 6 技能本地出题（英译中 / 中译英 / 拼写 / 听音 / 例句 / 互译）
+│   ├── practiceRound.ts     # 一轮的状态机（闸门 → 出题 → 复习 → 小结）
+│   ├── mastery.ts           # 掌握判定（连续对局 + 技能覆盖 + 14 天无错 + 轮次分布）
+│   ├── weakness.ts          # 薄弱分析（6 维度、最弱词、建议重点）
+│   ├── rounds.ts            # 一轮选词（新词 N 个，默认 1 + 按薄弱度复习）
+│   ├── feedback.ts          # AI 流式讲解、互译三档判分、本地降级
+│   ├── tts.ts               # 浏览器语音能力检测与朗读
+│   └── llm/                 # 经本地代理的传输、SSE 流式、模型列表、提示词、校验
 ├── data/wordbank.ts         # 内置示例词库
 ├── components/
-│   ├── Dashboard.tsx        # 今日
-│   ├── study/               # 闪卡学习
-│   ├── drill/               # 错题 AI 特训
+│   ├── Dashboard.tsx        # 今日（含薄弱分析面板）
+│   ├── study/               # 学习（一轮流程 + 新词闸门）
 │   ├── WordbookView.tsx     # 词库
-│   ├── SettingsView.tsx     # 设置
+│   ├── SettingsView.tsx     # 设置（含练习设置）
+│   ├── providers/           # provider 列表、编辑表单、模型列表弹窗
 │   └── ui/                  # 通用弹窗、图标、Toast
 └── styles/                  # 设计变量、基础排版、共享组件样式
 ```
@@ -118,9 +174,19 @@ src/
 
 ## 已知边界
 
+- 数据格式为 v2（`deepword:data:v2`）：首次打开时旧 v1 数据会自动迁移到 v2，旧键保留一个版本周期不清除；v1 备份仍可导入。1.1.0 只新增了可缺省字段（掌握标记、复习优先、一轮进度），**数据版本没有再升**，旧 v2 数据可直接读取。
+- 掌握词永久出队：标记后不再出现在学习与复习队列；当前版本未在界面提供「取消掌握」入口。
+- 仪表盘的「薄弱分析」里点最弱词**只能跳到词库首屏**，不能在词库里直接定位到那一条（已知限制）。
+- 「自动讲解」开关只落盘保存，答错的讲解目前**总会生成**，该开关暂未参与讲解的触发判断。
+- 语音只用浏览器内置的语音合成（零依赖、零成本）：**云端 TTS 与 OS 级发音未做**，也没有做发音录音与跟读打分。
+- AI 功能必须在本机起进程：代理只监听回环地址，纯静态托管 `dist/` 或代理未启动时，AI 讲解与「测试连接」不可用，会自动提示并回退本地解析。
+- 互译题每题要调用一次模型（成本与延迟最高），因此占比控制在每轮题量的 1/3 以内；没有配置模型时不出互译题。
+- 听音题依赖浏览器的英文语音：能力检测不到语音时不出听音题（其余题型不受影响）。
 - 数据存在 localStorage，受浏览器配额限制（通常 5 MB）；清除站点数据会丢失记录，建议定期在设置中导出备份。
 - LLM 输出经过严格校验，模型表现不佳时单次生成的题量可能少于请求数量。
-- 所有 LLM 网络链路均以契约一致的 mock 服务验证（OpenAI 兼容 + Anthropic 两条协议、失败回退、Key 不泄漏），真实接口行为取决于服务商实现与 CORS 配置。
+- 学习流程模块（出题、轮状态机、选词、掌握判定、薄弱分析、AI 反馈）已配套单元测试（124 例）；真实浏览器链路仍靠人工验收。
+- **没有 chat / 对话界面**：AI 只用于答错讲解与互译判分，不提供自由对话式的学习助手。
+- 所有 LLM 网络链路均由本地代理契约单测与契约一致的 mock 服务验证（OpenAI 兼容 + Anthropic 两条协议、失败回退、Key 不泄漏），真实接口行为取决于服务商实现与网络状况。
 - 数据无多标签页实时同步（同一浏览器多个标签页同时编辑时以最后写入为准）；暂无账号系统与跨设备同步。
 
 ## 文档
@@ -131,6 +197,8 @@ src/
 | [docs/spec.md](docs/spec.md) | 产品需求与验收规格：视图、功能行为、判定规则、验收清单 |
 | [docs/architecture.md](docs/architecture.md) | 架构与数据流：分层、状态管理、持久化、LLM 层细节、测试策略 |
 | [docs/version-spec.md](docs/version-spec.md) | 版本规格：应用 / 数据 / 提示词三条版本线、迁移规则、发布流程 |
+| [docs/v2-design.md](docs/v2-design.md) | 2.0 设计稿：Phase A / B 目标与验收约定（两者均已实现） |
+| [docs/phase-b-contract.md](docs/phase-b-contract.md) | Phase B 内部契约：学习流程各模块的接口与判定口径 |
 | [docs/agents.md](docs/agents.md) | 协作分工：Lead 与各代理的职责边界、协作机制、迭代复用方式 |
 
 ## License

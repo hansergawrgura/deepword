@@ -762,3 +762,199 @@
     padding: 14px 18px 18px;
   }
 }
+
+/* ==================================================================
+   统一舞台布局 —— 所有视图「中间内容」的唯一布局来源
+   ------------------------------------------------------------------
+   视图根元素把 .view-stage 包在顶部工具条之后；舞台占满主内容区剩余
+   高度，内部内容垂直 + 水平居中。要统一改对齐、留白、最大宽度，只改
+   这里（或覆盖 --stage-* 变量），不必逐个改视图自己的类名。
+
+   用法：
+     <div className="view-stage view-stage--sheet">
+       <div className="view-stage__inner"> ...任意视图内容... </div>
+     </div>
+   ================================================================== */
+
+/* 视图根元素撑满主内容区，舞台才有可分配的剩余高度 */
+.app-view {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 180px);
+}
+
+.app-view > * {
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+.view-stage {
+  /* 三个可调参数：宽度、上下留白、内部内容的垂直对齐方式 */
+  --stage-max-width: 900px;
+  --stage-pad-block: 0px;
+  --stage-justify: safe center;
+
+  /* 不收缩：内容超高时让页面正常滚动，而不是被舞台裁掉 */
+  flex: 1 0 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-block: var(--stage-pad-block);
+}
+
+/* 内容壳：所有阶段共用的宽度来源；同时撑满中间区域的可用高度，
+   这样阶段容器（卡片 / 纸面）能把留白吃满，而不是小小一块浮在中间。 */
+.view-stage__inner {
+  width: 100%;
+  min-width: 0;
+  max-width: var(--stage-max-width);
+  flex: 1 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: var(--stage-justify);
+  transition: max-width var(--duration-slow) var(--ease-out);
+}
+
+/* 所有阶段根容器统一填满舞台高度；各容器内部再按 --stage-justify
+   把内容居中（见各视图 CSS），所以是「容器填充 + 内容居中」。 */
+.view-stage__inner > * {
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+/* 没有可见卡片边框的阶段（如新词闸门）用通用 pane 填充并居中内部内容 */
+.view-stage__pane {
+  display: flex;
+  flex-direction: column;
+  justify-content: var(--stage-justify);
+}
+
+/* 宽度档位集中在这里维护 */
+.view-stage--sheet {
+  --stage-max-width: 900px;
+}
+
+.view-stage--practice {
+  --stage-max-width: 1040px;
+}
+
+/* ------------------------------------------------------------------
+   固定几何舞台（学习页专用）
+   ------------------------------------------------------------------
+   学习页的 计划 / 闸门 / 答题 / 反馈 / 小结 / 闪卡 全部共用这一个外框：
+   - 四边留白统一为 --stage-inset（上 = 右 = 下 = 左，同一个数值）；
+   - 外框宽度只取主内容区宽度，高度只取顶部工具条之下的剩余高度；
+     两者都与内部内容的类型、长短、作答阶段无关；
+   - 内部再超高只在该框里滚动，不会把舞台顶高、不会挤动其它区域；
+   - 没有 max-width 过渡 / 档位切换 / 位移，状态切换时几何完全不变。
+   ------------------------------------------------------------------ */
+.view-stage--fixed {
+  --stage-inset: 24px;
+  --stage-max-width: none;
+  --stage-justify: flex-start;
+
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  align-items: stretch;
+  padding: var(--stage-inset);
+  overflow: hidden;
+}
+
+.view-stage--fixed .view-stage__inner {
+  max-width: none;
+  flex: 1 1 0;
+  min-height: 0;
+  justify-content: flex-start;
+  transition: none;
+}
+
+.view-stage--fixed .view-stage__inner > * {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+}
+
+/* 阶段切换只淡入，不做上下位移：外框不动，内容也不「跳一下」 */
+.view-stage--fixed .enter-up {
+  animation-name: fade-in;
+}
+
+/* 只给「含学习页」的视图一条确定的高度链，其它视图的外壳完全不变。
+   页脚自带 24px 上外边距并入舞台统一留白，页脚视觉位置保持不变。 */
+.app-main__inner:has(.study) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-view:has(> .study) {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-view:has(> .study) > .study {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-main:has(.study) .app-footer {
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .view-stage {
+    /* 窄屏内容普遍偏长，不再强行居中 */
+    --stage-justify: flex-start;
+    --stage-pad-block: 12px;
+  }
+
+  /* 窄屏是上下堆叠布局，容器保持自然高度，不再拉伸填充 */
+  .view-stage__inner > * {
+    flex: 0 0 auto;
+  }
+
+  .view-stage--sheet,
+  .view-stage--practice {
+    --stage-max-width: 100%;
+  }
+
+  /* 窄屏改为上下堆叠：固定高度会让长内容被裁掉，这里交回自然高度，
+     但四边留白仍是同一个 --stage-inset。 */
+  .view-stage--fixed {
+    --stage-inset: 16px;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .view-stage--fixed .view-stage__inner,
+  .view-stage--fixed .view-stage__inner > * {
+    flex: 0 0 auto;
+  }
+
+  .app-main:has(.study) .app-footer {
+    margin-top: 24px;
+  }
+
+  .app-main__inner:has(.study),
+  .app-view:has(> .study),
+  .app-view:has(> .study) > .study {
+    flex: 0 0 auto;
+  }
+
+  .app-view:has(> .study) {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 480px) {
+  .view-stage--fixed {
+    --stage-inset: 14px;
+  }
+}

@@ -1,8 +1,12 @@
 /**
- * 学习页的闪卡 —— 一张「词笺」。
+ * 学习页的词笺 —— 一张「卡片」。
  *
- * 正面：英文词、音标、词性、标签、发音；背面：释义、例句（朱批引线）、排期。
- * 卡片是纯粹的表现层：翻面/发音/自评都由 StudyView 驱动，这里不读写任何数据。
+ * 两种用法：
+ * - `variant="card"`（默认）：完整的 SRS 词笺，正面给单词 + 音标 + 词性 + 排期；
+ * - `variant="gate"`：新词闸门专用 —— **正面只给单词（可发音）**，
+ *   音标 / 词性 / 释义 / 例句 / 标签全部放到背面，翻面才给答案。
+ *
+ * 卡片是纯粹的表现层：翻面/发音都由 StudyView 驱动，这里不读写任何数据。
  */
 
 import type { SrsCard, Word } from '@/types';
@@ -18,6 +22,8 @@ export interface FlashcardProps {
   flipped: boolean;
   /** 在正面误按 1–4 时递增，用来轻点一下「翻面」提示。 */
   nudge: number;
+  /** 'gate' = 闸门（正面只给单词）；'card' = 完整词笺。 */
+  variant?: 'card' | 'gate';
   onFlip: () => void;
   onSpeak: () => void;
 }
@@ -42,6 +48,7 @@ export default function Flashcard({
   isDue,
   flipped,
   nudge,
+  variant = 'card',
   onFlip,
   onSpeak,
 }: FlashcardProps) {
@@ -50,6 +57,8 @@ export default function Flashcard({
   const mastery = masteryScore(card);
   const intervalText = card.interval > 0 ? `${card.interval} 天` : '尚未排期';
   const dueText = card.status === 'new' ? '首次学习' : relativeDue(card.dueAt);
+  /** 闸门模式：正面只给单词，其余信息留到背面。 */
+  const gate = variant === 'gate';
 
   return (
     <div className="study-card-stage">
@@ -74,7 +83,9 @@ export default function Flashcard({
 
           <div className="study-card__center">
             <h2 className={cx('study-card__word', wordSizeClass(word.term))}>{word.term}</h2>
-            {word.phonetic || word.partOfSpeech ? (
+            {gate ? (
+              <p className="study-card__gate-hint">先想一想它的意思，再决定认不认识。</p>
+            ) : word.phonetic || word.partOfSpeech ? (
               <p className="study-card__pron">
                 {word.phonetic ? (
                   <span className="study-card__phonetic">{word.phonetic}</span>
@@ -88,7 +99,7 @@ export default function Flashcard({
 
           <footer className="study-card__foot">
             <span className="study-card__tags">
-              {word.tags.length > 0 ? (
+              {gate ? null : word.tags.length > 0 ? (
                 word.tags.slice(0, 3).map((tag) => (
                   <span key={tag} className="study-card__tag">
                     #{tag}
@@ -145,6 +156,9 @@ export default function Flashcard({
               {word.phonetic ? (
                 <span className="study-card__back-phonetic">{word.phonetic}</span>
               ) : null}
+              {word.partOfSpeech ? (
+                <span className="study-card__back-pos">{word.partOfSpeech}</span>
+              ) : null}
             </div>
           </header>
 
@@ -166,6 +180,16 @@ export default function Flashcard({
           </div>
 
           <footer className="study-card__foot study-card__foot--due">
+            <span className="study-card__tags">
+              {gate && word.tags.length > 0 ? (
+                word.tags.slice(0, 4).map((tag) => (
+                  <span key={tag} className="study-card__tag">
+                    #{tag}
+                  </span>
+                ))
+              ) : null}
+            </span>
+
             <dl className="study-card__due">
               <div className="study-card__due-item">
                 <dt>状态</dt>

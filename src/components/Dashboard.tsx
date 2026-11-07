@@ -9,6 +9,9 @@ import {
   getWeakWords,
 } from '../lib/stats';
 import { SRS_STATUS_META } from '../lib/srs';
+import { countAvailable } from '../lib/rounds';
+import { hasResumableSession } from '../lib/practiceRound';
+import { getWeaknessReport } from '../lib/weakness';
 import { percent, relativeTime, truncate, weekdayName } from '../lib/utils';
 import {
   IconArrowRight,
@@ -33,6 +36,14 @@ function compactDate(now: Date): string {
   return `${now.getFullYear()}.${`${now.getMonth() + 1}`.padStart(2, '0')}.${`${now.getDate()}`.padStart(2, '0')}`;
 }
 
+/** 正确率分档：用于细横条配色（弱 → 中 → 强）。 */
+function accuracyTone(accuracy: number | null): 'none' | 'weak' | 'mid' | 'strong' {
+  if (accuracy === null) return 'none';
+  if (accuracy < 60) return 'weak';
+  if (accuracy < 85) return 'mid';
+  return 'strong';
+}
+
 export default function Dashboard({ navigate }: ViewProps) {
   const { data } = useApp();
   const now = new Date();
@@ -42,7 +53,15 @@ export default function Dashboard({ navigate }: ViewProps) {
   const heatmap = getHeatmap(data.stats.daily, 28, nowTs);
   const activities = getRecentActivity(data, 5);
   const mastery = getMasteryBreakdown(data);
-  const pending = overview.dueCount + overview.newCount;
+  const weakness = getWeaknessReport(data, { limit: 5, now: nowTs });
+  const available = countAvailable(data, nowTs);
+  const weakestStat = weakness.weakestSkill
+    ? weakness.skills.find((item) => item.skill === weakness.weakestSkill)
+    : undefined;
+  // 上一轮没做完时，入口文案改为「继续上一轮」。
+  const resumable = hasResumableSession(data);
+  const roundActionLabel = resumable ? '继续上一轮' : '开始本轮学习';
+  const pending = available.reviewWords + available.newWords;
   const monthLabel = `${now.getMonth() + 1} 月`;
   const hasLearned = overview.learnedWords > 0;
 
@@ -62,7 +81,7 @@ export default function Dashboard({ navigate }: ViewProps) {
           </h1>
           <p className="dash-intro">
             错词不是负担，而是下一次记住的线索。今天有{' '}
-            <strong className="u-vermilion">{pending}</strong> 张卡片等你翻过。
+            <strong className="u-vermilion">{pending}</strong> 个词等你过一遍。
           </p>
         </div>
         <div className="dash-stamp" aria-hidden="true">
@@ -76,14 +95,14 @@ export default function Dashboard({ navigate }: ViewProps) {
       <section className="dash-stats" aria-label="学习概览">
         <article className="dash-stat">
           <div className="dash-stat__top">
-            <span className="mono-label">DUE</span>
+            <span className="mono-label">REVIEW</span>
             <IconCards size={16} />
           </div>
           <div className="dash-stat__value">
-            {overview.dueCount}
-            <span className="dash-stat__unit">张</span>
+            {available.reviewWords}
+            <span className="dash-stat__unit">个</span>
           </div>
-          <p className="dash-stat__label">到期复习 · 新词 {overview.newCount} 个</p>
+          <p className="dash-stat__label">待复习 · 按薄弱度 · 新词 {available.newWords} 个</p>
         </article>
         <article className="dash-stat">
           <div className="dash-stat__top">
@@ -142,7 +161,7 @@ export default function Dashboard({ navigate }: ViewProps) {
               <span className="mono-label">TODAY&apos;S RITUAL</span>
               <h2 className="dash-hero__title">翻一页，记一页</h2>
               <p className="dash-hero__desc">
-                先温习到期的旧词，再认识几个新词。答错的词会进入 AI 特训，由大模型读你的错误，为你重新命题。
+                先温习到期的旧词，再认识几个新词。答错的词会按薄弱度排进下一轮，优先再练一遍。
               </p>
 
               <div className="dash-hero__progress">
@@ -163,20 +182,20 @@ export default function Dashboard({ navigate }: ViewProps) {
                   className="btn btn--primary btn--lg"
                   onClick={() => navigate('study')}
                 >
-                  开始今日学习
+                  {roundActionLabel}
                   <IconArrowRight size={17} />
                 </button>
-                <button type="button" className="btn btn--quiet" onClick={() => navigate('drill')}>
-                  <IconSparkle size={16} />
-                  错题 AI 特训
-                </button>
               </div>
+
+              {resumable && (
+                <p className="dash-hero__resume">上一轮还没做完，接着往下走。</p>
+              )}
             </div>
 
             <div className="dash-hero__tally" aria-label="待学与连击">
               <div className="dash-hero__tally-item">
                 <strong>{pending}</strong>
-                <span>张待学</span>
+                <span>个待学</span>
               </div>
               <div className="dash-hero__tally-rule" aria-hidden="true" />
               <div className="dash-hero__tally-item">
@@ -263,17 +282,8 @@ export default function Dashboard({ navigate }: ViewProps) {
             <header className="dash-panel__head">
               <div>
                 <h2 className="dash-panel__title">错题待攻克</h2>
-                <p className="dash-panel__sub">最该被重新命题的几个词。</p>
+                <p className="dash-panel__sub">最该再练一遍的几个词。</p>
               </div>
-              <button
-                type="button"
-                className="dash-link"
-                onClick={() => navigate('drill')}
-                aria-label="前往错题特训"
-              >
-                特训
-                <IconChevronRight size={14} />
-              </button>
             </header>
 
             {weakWords.length === 0 ? (
@@ -281,7 +291,7 @@ export default function Dashboard({ navigate }: ViewProps) {
                 <IconLeafMark />
                 <div>
                   <p>{hasLearned ? '错题本还是空的' : '还没有开始学习'}</p>
-                  <span>{hasLearned ? '保持这样的手感。' : '答错的词会在这里排队，等待 AI 针对性出题。'}</span>
+                  <span>{hasLearned ? '保持这样的手感。' : '答错的词会在这里排队，下一轮优先复习。'}</span>
                 </div>
               </div>
             ) : (
@@ -292,8 +302,8 @@ export default function Dashboard({ navigate }: ViewProps) {
                       <button
                         type="button"
                         className="dash-weak__row"
-                        onClick={() => navigate('drill')}
-                        title={`去特训「${word.term}」`}
+                        onClick={() => navigate('study')}
+                        title={`去复习「${word.term}」`}
                       >
                         <span className="dash-weak__term">{word.term}</span>
                         <span className="dash-weak__meaning">{truncate(word.meaning, 26)}</span>
@@ -313,12 +323,103 @@ export default function Dashboard({ navigate }: ViewProps) {
                 <button
                   type="button"
                   className="btn btn--ghost btn--block dash-weak__cta"
-                  onClick={() => navigate('drill')}
+                  onClick={() => navigate('study')}
                 >
-                  <IconSparkle size={15} />
-                  让 AI 为这些错词出题
+                  <IconArrowRight size={15} />
+                  去复习这些词
                 </button>
               </>
+            )}
+          </section>
+
+          <section className="dash-panel dash-weakness">
+            <header className="dash-panel__head">
+              <div>
+                <h2 className="dash-panel__title">薄弱分析</h2>
+                <p className="dash-panel__sub">六个技能各练了多少、错在哪里，一眼看清。</p>
+              </div>
+              {weakness.practiced && weakestStat ? (
+                <span className="badge badge--vermilion">最弱 · {weakestStat.label}</span>
+              ) : null}
+            </header>
+
+            {weakness.practiced ? (
+              <>
+                <ul className="dash-weakness__skills">
+                  {weakness.skills.map((stat) => (
+                    <li
+                      key={stat.skill}
+                      className="dash-weakness__skill"
+                      data-tone={accuracyTone(stat.accuracy)}
+                      data-weakest={stat.skill === weakness.weakestSkill ? 'true' : 'false'}
+                      title={`${stat.label} · ${stat.attempts} 次作答`}
+                    >
+                      <span className="dash-weakness__skill-label">{stat.label}</span>
+                      <span className="dash-weakness__skill-bar" aria-hidden="true">
+                        <span style={{ width: `${stat.accuracy ?? 0}%` }} />
+                      </span>
+                      <span className="dash-weakness__skill-acc">
+                        {stat.accuracy === null ? '—' : `${stat.accuracy}%`}
+                      </span>
+                      <span className="dash-weakness__skill-count">{stat.attempts} 次</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="dash-weakness__split">
+                  <div className="dash-weakness__words">
+                    <h3 className="dash-weakness__subtitle">最该重练的词</h3>
+                    {weakness.weakestWords.length === 0 ? (
+                      <p className="dash-weakness__note">暂时没有明显失手的词，保持这个手感。</p>
+                    ) : (
+                      <ul className="dash-weakness__word-list">
+                        {weakness.weakestWords.slice(0, 5).map((item) => (
+                          <li key={item.word.id}>
+                            <button
+                              type="button"
+                              className="dash-weakness__word"
+                              onClick={() => navigate('wordbook')}
+                              title={`在词库里查看「${item.word.term}」`}
+                            >
+                              <span className="dash-weakness__word-term">{item.word.term}</span>
+                              <span className="dash-weakness__word-meaning">
+                                {truncate(item.word.meaning, 24)}
+                              </span>
+                              <span className="dash-weakness__word-meta">
+                                <span className="badge badge--vermilion">错 {item.wrongCount}</span>
+                                <span className="dash-weakness__word-acc">
+                                  {item.accuracy === null ? '—' : `${item.accuracy}%`}
+                                </span>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <p className="dash-weakness__focus">
+                    <span className="dash-weakness__focus-label">建议重点</span>
+                    <span className="dash-weakness__focus-text">{weakness.focus}</span>
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="dash-inline-empty dash-weakness__empty">
+                <IconLeafMark />
+                <div>
+                  <p>还没有练习记录</p>
+                  <span>完成一轮练习后，这里会告诉你 6 个技能各弱在哪。</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm dash-weakness__empty-cta"
+                  onClick={() => navigate('study')}
+                >
+                  {roundActionLabel}
+                  <IconArrowRight size={14} />
+                </button>
+              </div>
             )}
           </section>
 

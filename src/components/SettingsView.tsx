@@ -1,42 +1,54 @@
+/**
+ * 设置页：多 provider 管理 + 数据管理 + 外观 + 关于。
+ *
+ * Provider 的增删改 / 切换当前使用只通过 useApp().actions 写入；
+ * 列表与编辑表单的展示逻辑拆到 components/providers/ 下。
+ */
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../state/AppState';
-import type { AppData, LLMSettings, ProviderKind, ThemeMode } from '../types';
+import type {
+  AppData,
+  PracticeSettings,
+  ProviderDraft,
+  ProviderProfile,
+  ThemeMode,
+  TtsSettings,
+} from '../types';
+import { DEFAULT_PRACTICE_SETTINGS, MAX_PROVIDERS } from '../types';
+import { exportBackup, getStorageUsage, parseBackup } from '../lib/storage';
 import {
-  PROVIDER_PRESETS,
-  exportBackup,
-  getStorageUsage,
-  parseBackup,
-} from '../lib/storage';
-import { testLLMConnection, PROMPT_VERSION } from '../lib/llm';
-import type { LLMConnectionResult } from '../lib/llm';
-import { formatLatency, isLocalEndpoint } from '../lib/utils';
+  findActiveProvider,
+  providerName,
+  providerSummaryText,
+  resolveActiveLLMSettings,
+} from '../lib/providerModel';
+import { useEnglishVoices } from '../lib/tts';
+import { PROMPT_VERSION } from '../lib/llm';
+import { APP_VERSION } from '../lib/version';
+import { clamp, cx, isLocalEndpoint } from '../lib/utils';
 import { ConfirmDialog } from './ui/ConfirmDialog';
-import {
-  IconCheck,
-  IconDownload,
-  IconEyeToggle,
-  IconRefresh,
-  IconSparkle,
-  IconUpload,
-} from './ui/icons';
+import { IconCheck, IconDownload, IconPlus, IconSparkle, IconUpload } from './ui/icons';
+import ProviderEditor from './providers/ProviderEditor';
+import ProviderList from './providers/ProviderList';
+import { thinkingModeLabel } from './providers/draft';
 import './Settings.css';
 
-const OPENAI_PRESETS = [
-  { label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  { label: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-  { label: 'Moonshot', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
-  { label: 'Ollama 本地', baseUrl: 'http://localhost:11434/v1', model: 'qwen2.5:7b' },
-];
-
-const ANTHROPIC_MODELS = ['claude-sonnet-4-5', 'claude-haiku-4-5', 'claude-opus-4-1'];
-const OPENAI_MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'deepseek-chat', 'qwen2.5:7b'];
-
-type TestState =
-  | { status: 'idle' }
-  | { status: 'testing' }
-  | { status: 'done'; result: LLMConnectionResult };
-
+type EditorState = { mode: 'create' } | { mode: 'edit'; id: string };
 type DialogKind = 'import' | 'clear-progress' | 'reset-all' | null;
+
+/** 每词题量可选值（4~8）。 */
+const QUESTIONS_PER_WORD_OPTIONS = [4, 5, 6, 7, 8];
+/** 每轮复习词数可选值（4~6）。 */
+const REVIEW_WORDS_OPTIONS = [4, 5, 6];
+/** 每轮新词数可选值（1~10）。 */
+const NEW_WORDS_OPTIONS = Array.from({ length: 10 }, (_, index) => index + 1);
+/** 答对后自动跳转：毫秒，0 = 手动。 */
+const AUTO_ADVANCE_OPTIONS = [
+  { value: 3_000, label: '3 秒' },
+  { value: 5_000, label: '5 秒' },
+  { value: 0, label: '手动' },
+];
 
 function downloadJson(filename: string, content: string) {
   const blob = new Blob([content], { type: 'application/json' });
@@ -52,89 +64,162 @@ function downloadJson(filename: string, content: string) {
 
 export default function SettingsView() {
   const { data, actions } = useApp();
-  const [draft, setDraft] = useState<LLMSettings>(data.settings);
-  const [showKey, setShowKey] = useState(false);
-  const [test, setTest] = useState<TestState>({ status: 'idle' });
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProviderProfile | null>(null);
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [pendingImport, setPendingImport] = useState<AppData | null>(null);
   const [importError, setImportError] = useState('');
   const [includeKey, setIncludeKey] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  // 英文语音列表：浏览器可能在首次加载后才拿到 voices，Hook 内部监听 voiceschanged。
+  const voices = useEnglishVoices();
 
-  // 导入备份 / 恢复初始数据会替换全局 settings，草稿需同步，避免旧值被误保存覆盖。
-  useEffect(() => {
-    setDraft(data.settings);
-    setTest({ status: 'idle' });
-  }, [data.settings]);
-
-  const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(data.settings), [draft, data.settings]);
   const usage = useMemo(() => getStorageUsage(), [data.updatedAt]);
-  const modelOptions = draft.provider === 'anthropic' ? ANTHROPIC_MODELS : OPENAI_MODELS;
-  const providerPreset = PROVIDER_PRESETS[draft.provider];
-  const configured = Boolean(data.settings.baseUrl.trim() && data.settings.model.trim());
-  const needsKey =
-    !data.settings.apiKey.trim() &&
-    (data.settings.provider === 'anthropic' || !isLocalEndpoint(data.settings.baseUrl));
+  const activeProfile = useMemo(() => findActiveProvider(data), [data]);
+  const activeSettings = resolveActiveLLMSettings(data);
+  const activeIndex = activeProfile
+    ? data.providers.findIndex((item) => item.id === activeProfile.id)
+    : 0;
+  const configured = activeSettings
+    ? Boolean(activeSettings.baseUrl.trim() && activeSettings.model.trim())
+    : false;
+  const needsKey = activeSettings
+    ? !activeSettings.apiKey.trim() &&
+      (activeSettings.provider === 'anthropic' || !isLocalEndpoint(activeSettings.baseUrl))
+    : false;
   const aiReady = configured && !needsKey;
-  const aiStatusLabel = !configured ? 'AI 出题未配置' : needsKey ? '待填写 API Key' : 'AI 出题已就绪';
+  const aiStatusLabel = !activeSettings
+    ? '尚未配置模型'
+    : !configured
+      ? '配置待补全'
+      : needsKey
+        ? '待填写 API Key'
+        : 'AI 已就绪';
+  const atLimit = data.providers.length >= MAX_PROVIDERS;
+  const editingProfile =
+    editor?.mode === 'edit'
+      ? (data.providers.find((item) => item.id === editor.id) ?? null)
+      : null;
 
-  const patch = (next: Partial<LLMSettings>) => {
-    setDraft((current) => ({ ...current, ...next }));
-    if (test.status !== 'idle') setTest({ status: 'idle' });
+  /* ------------------------- 练习设置（Phase B） ------------------------- */
+  // 兜底合并默认值，保证 tts 的三个字段始终齐全（旧数据可能缺字段）。
+  const practice: PracticeSettings = {
+    ...DEFAULT_PRACTICE_SETTINGS,
+    ...data.practice,
+    tts: { ...DEFAULT_PRACTICE_SETTINGS.tts, ...data.practice?.tts },
   };
+  // 复习词数固定在 4~6；复习题量必须落在 [复习词数, 2×复习词数]。
+  const reviewWords = clamp(Math.round(practice.reviewWordsPerRound), 4, 6);
+  const reviewQuestions = clamp(
+    Math.round(practice.reviewQuestionsPerRound),
+    reviewWords,
+    reviewWords * 2,
+  );
+  const reviewQuestionOptions = Array.from(
+    { length: reviewWords * 2 - reviewWords + 1 },
+    (_, index) => reviewWords + index,
+  );
 
-  const changeProvider = (provider: ProviderKind) => {
-    setDraft((current) => {
-      if (current.provider === provider) return current;
-      const prevPreset = PROVIDER_PRESETS[current.provider];
-      const nextPreset = PROVIDER_PRESETS[provider];
-      const customBase = current.baseUrl !== prevPreset.baseUrl;
-      const customModel = current.model !== prevPreset.model;
-      return {
-        ...current,
-        provider,
-        baseUrl: customBase ? current.baseUrl : nextPreset.baseUrl,
-        model: customModel ? current.model : nextPreset.model,
-      };
+  function updatePractice(patch: Partial<PracticeSettings>) {
+    actions.setPracticeSettings(patch);
+  }
+
+  /** 发音设置必须整体回写（rate / voiceUri / autoPlay）。 */
+  function updateTts(patch: Partial<TtsSettings>) {
+    actions.setPracticeSettings({ tts: { ...practice.tts, ...patch } });
+  }
+
+  function handleReviewWordsChange(next: number) {
+    const words = clamp(Math.round(next), 4, 6);
+    actions.setPracticeSettings({
+      reviewWordsPerRound: words,
+      reviewQuestionsPerRound: clamp(
+        Math.round(practice.reviewQuestionsPerRound),
+        words,
+        words * 2,
+      ),
     });
-    setTest({ status: 'idle' });
-  };
+  }
 
-  const save = () => {
-    actions.updateSettings(draft);
-    actions.toast('模型设置已保存到本机', 'success');
-    setTest({ status: 'idle' });
-  };
-
-  const runTest = async () => {
-    if (!draft.baseUrl.trim() || !draft.model.trim()) {
-      setTest({
-        status: 'done',
-        result: { ok: false, latencyMs: 0, message: '请先填写接口地址与模型名称。' },
-      });
+  // 复习题量越界时自动拉回合法区间（改复习词数后立刻生效）。
+  useEffect(() => {
+    if (
+      practice.reviewWordsPerRound === reviewWords &&
+      practice.reviewQuestionsPerRound === reviewQuestions
+    ) {
       return;
     }
-    setTest({ status: 'testing' });
-    const started = performance.now();
-    const result = await testLLMConnection(draft);
-    setTest({
-      status: 'done',
-      result: {
-        ...result,
-        latencyMs: result.latencyMs || Math.round(performance.now() - started),
-      },
+    actions.setPracticeSettings({
+      reviewWordsPerRound: reviewWords,
+      reviewQuestionsPerRound: reviewQuestions,
     });
-  };
+  }, [
+    actions,
+    practice.reviewWordsPerRound,
+    practice.reviewQuestionsPerRound,
+    reviewWords,
+    reviewQuestions,
+  ]);
 
-  const handleExportBackup = () => {
+  // 导入备份 / 删除等操作会替换 providers；编辑目标不存在时收起表单。
+  useEffect(() => {
+    setEditor((current) => {
+      if (current && current.mode === 'edit' && !data.providers.some((item) => item.id === current.id)) {
+        return null;
+      }
+      return current;
+    });
+  }, [data.providers]);
+
+  function openCreate() {
+    if (atLimit) {
+      actions.toast(`最多保存 ${MAX_PROVIDERS} 份配置`, 'info');
+      return;
+    }
+    setEditor({ mode: 'create' });
+    setImportError('');
+  }
+
+  function openEdit(id: string) {
+    if (!data.providers.some((item) => item.id === id)) return;
+    setEditor({ mode: 'edit', id });
+    setImportError('');
+  }
+
+  function handleSave(draft: ProviderDraft): { ok: boolean; message?: string } {
+    if (editor && editor.mode === 'edit') {
+      actions.updateProvider(editor.id, draft);
+      actions.toast('模型配置已更新', 'success');
+      setEditor(null);
+      return { ok: true };
+    }
+    const result = actions.addProvider(draft);
+    if (result.ok) setEditor(null);
+    return result;
+  }
+
+  function confirmDelete() {
+    const target = deleteTarget;
+    if (!target) return;
+    actions.deleteProvider(target.id);
+    setDeleteTarget(null);
+    setEditor((current) =>
+      current && current.mode === 'edit' && current.id === target.id ? null : current,
+    );
+  }
+
+  function handleExportBackup() {
     downloadJson(
       `deepword-backup-${new Date().toISOString().slice(0, 10)}.json`,
       exportBackup(data, { includeApiKey: includeKey }),
     );
-    actions.toast(includeKey ? '完整备份已导出（包含 API Key，请妥善保管）' : '备份已导出（不含 API Key）', 'success');
-  };
+    actions.toast(
+      includeKey ? '完整备份已导出（包含 API Key，请妥善保管）' : '备份已导出（不含 API Key）',
+      'success',
+    );
+  }
 
-  const handleImportFile = async (file: File | undefined) => {
+  async function handleImportFile(file: File | undefined) {
     if (!file) return;
     setImportError('');
     try {
@@ -145,23 +230,24 @@ export default function SettingsView() {
     } catch (error) {
       setImportError(error instanceof Error ? error.message : '备份文件解析失败');
     }
-  };
+  }
 
-  const confirmDialog = () => {
+  function confirmDialog() {
     if (dialog === 'import' && pendingImport) {
       actions.importBackup(pendingImport);
       setPendingImport(null);
+      setEditor(null);
     } else if (dialog === 'clear-progress') {
       actions.clearProgress();
     } else if (dialog === 'reset-all') {
       actions.resetAll();
     }
     setDialog(null);
-  };
+  }
 
-  const setTheme = (theme: ThemeMode) => {
+  function setTheme(theme: ThemeMode) {
     actions.setTheme(theme);
-  };
+  }
 
   return (
     <div className="settings">
@@ -169,13 +255,15 @@ export default function SettingsView() {
         <div>
           <div className="view-head__eyebrow">
             <span className="mono-label">SETTINGS</span>
-            <span className={`badge ${aiReady ? 'badge--sage badge--dot' : 'badge--gold badge--dot'}`}>
+            <span
+              className={`badge ${aiReady ? 'badge--sage badge--dot' : 'badge--gold badge--dot'}`}
+            >
               {aiStatusLabel}
             </span>
           </div>
           <h1 className="view-title">设置</h1>
           <p className="view-sub">
-            接入你自己的大模型，让错题被重新命题。所有数据与密钥只保存在这台设备的浏览器里。
+            保存多份大模型配置，仅「当前使用」的一份参与出题与判分。所有数据与密钥只保存在这台设备的浏览器里。
           </p>
         </div>
       </header>
@@ -188,215 +276,262 @@ export default function SettingsView() {
               <div>
                 <h2 className="settings-card__title">模型连接</h2>
                 <p className="settings-card__sub">
-                  支持 OpenAI 兼容接口与 Anthropic。请求从浏览器直接发往你填写的地址。
+                  支持 OpenAI 兼容接口与 Anthropic；同一时间只有一份配置生效。
                 </p>
               </div>
+              {!editor && (
+                <div className="settings-card__head-actions">
+                  <span className="mono-label">
+                    {data.providers.length} / {MAX_PROVIDERS}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={openCreate}
+                    disabled={atLimit}
+                  >
+                    <IconPlus size={14} /> 新增配置
+                  </button>
+                </div>
+              )}
             </header>
 
             <div className="settings-card__body">
+              {editor ? (
+                <ProviderEditor
+                  key={editor.mode === 'edit' ? editor.id : 'create'}
+                  mode={editor.mode}
+                  initial={editingProfile}
+                  onCancel={() => setEditor(null)}
+                  onSave={handleSave}
+                />
+              ) : (
+                <>
+                  <ProviderList
+                    providers={data.providers}
+                    activeProviderId={data.activeProviderId}
+                    atLimit={atLimit}
+                    onAdd={openCreate}
+                    onEdit={openEdit}
+                    onDelete={(profile) => setDeleteTarget(profile)}
+                    onSetActive={(id) => actions.setActiveProvider(id)}
+                  />
+
+                  {atLimit && (
+                    <p className="hint">
+                      已达到 {MAX_PROVIDERS} 份配置上限；删除一份后才能继续新增。
+                    </p>
+                  )}
+
+                  <p className="settings-note">
+                    <strong>安全提示：</strong>API Key 仅保存在本机 localStorage 中，
+                    请求经本地代理转发，不记录、不上传。删除配置会一并删除其中保存的 Key。
+                  </p>
+                </>
+              )}
+            </div>
+          </section>
+
+          <section className="card settings-card settings-practice">
+            <header className="settings-card__head">
+              <span className="settings-card__index">贰</span>
+              <div>
+                <h2 className="settings-card__title">练习设置</h2>
+                <p className="settings-card__sub">
+                  一轮怎么练、答对后多久翻页、发音怎么读。改完立即生效。
+                </p>
+              </div>
+            </header>
+            <div className="settings-card__body">
+              <div className="field-row">
+                <div className="field">
+                  <label className="label" htmlFor="practice-new-words">
+                    每轮新词数
+                  </label>
+                  <select
+                    id="practice-new-words"
+                    className="select"
+                    value={practice.newWordsPerRound}
+                    onChange={(event) =>
+                      updatePractice({ newWordsPerRound: Number(event.target.value) })
+                    }
+                  >
+                    {NEW_WORDS_OPTIONS.map((count) => (
+                      <option key={count} value={count}>
+                        {count} 个
+                      </option>
+                    ))}
+                  </select>
+                  <span className="hint">一轮认几个新词；贪多不如吃透，默认 1 个。</span>
+                </div>
+
+                <div className="field">
+                  <label className="label" htmlFor="practice-questions-per-word">
+                    每词题量
+                  </label>
+                  <select
+                    id="practice-questions-per-word"
+                    className="select"
+                    value={practice.questionsPerNewWord}
+                    onChange={(event) =>
+                      updatePractice({ questionsPerNewWord: Number(event.target.value) })
+                    }
+                  >
+                    {QUESTIONS_PER_WORD_OPTIONS.map((count) => (
+                      <option key={count} value={count}>
+                        {count} 题
+                      </option>
+                    ))}
+                  </select>
+                  <span className="hint">一个新词出几道题，覆盖英译中、中译英、拼写等。</span>
+                </div>
+              </div>
+
+              <div className="field-row">
+                <div className="field">
+                  <label className="label" htmlFor="practice-review-words">
+                    每轮复习词数
+                  </label>
+                  <select
+                    id="practice-review-words"
+                    className="select"
+                    value={reviewWords}
+                    onChange={(event) => handleReviewWordsChange(Number(event.target.value))}
+                  >
+                    {REVIEW_WORDS_OPTIONS.map((count) => (
+                      <option key={count} value={count}>
+                        {count} 个
+                      </option>
+                    ))}
+                  </select>
+                  <span className="hint">新词之后，按薄弱度挑几个旧词回炉。</span>
+                </div>
+
+                <div className="field">
+                  <label className="label" htmlFor="practice-review-questions">
+                    每轮复习题量
+                  </label>
+                  <select
+                    id="practice-review-questions"
+                    className="select"
+                    value={reviewQuestions}
+                    onChange={(event) =>
+                      updatePractice({ reviewQuestionsPerRound: Number(event.target.value) })
+                    }
+                  >
+                    {reviewQuestionOptions.map((count) => (
+                      <option key={count} value={count}>
+                        {count} 题
+                      </option>
+                    ))}
+                  </select>
+                  <span className="hint">
+                    随复习词数联动，范围 {reviewWords}～{reviewWords * 2} 题，保证每个复习词至少被问一次。
+                  </span>
+                </div>
+              </div>
+
               <div className="field">
-                <span className="label">接口协议</span>
-                <div className="segmented settings-provider" role="group" aria-label="接口协议">
-                  {(Object.keys(PROVIDER_PRESETS) as ProviderKind[]).map((provider) => (
+                <span className="label">答对后自动跳转</span>
+                <div className="segmented" role="group" aria-label="答对后自动跳转">
+                  {AUTO_ADVANCE_OPTIONS.map((option) => (
                     <button
-                      key={provider}
+                      key={option.value}
                       type="button"
-                      className={
-                        draft.provider === provider
-                          ? 'segmented__option segmented__option--active'
-                          : 'segmented__option'
-                      }
-                      aria-pressed={draft.provider === provider}
-                      onClick={() => changeProvider(provider)}
+                      className={cx(
+                        'segmented__option',
+                        practice.feedbackAutoAdvanceMs === option.value &&
+                          'segmented__option--active',
+                      )}
+                      aria-pressed={practice.feedbackAutoAdvanceMs === option.value}
+                      onClick={() => updatePractice({ feedbackAutoAdvanceMs: option.value })}
                     >
-                      {PROVIDER_PRESETS[provider].label}
+                      {option.label}
                     </button>
                   ))}
                 </div>
-                <p className="hint">{providerPreset.hint}</p>
+                <span className="hint">答对后停留几秒自动翻到下一题；答错一定等你看完讲解。</span>
               </div>
 
-              {draft.provider === 'openai' && (
-                <div className="field">
-                  <span className="label">常用服务</span>
-                  <div className="settings-presets">
-                    {OPENAI_PRESETS.map((preset) => {
-                      const active =
-                        draft.baseUrl === preset.baseUrl && draft.model === preset.model;
-                      return (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          className={active ? 'chip chip--active' : 'chip'}
-                          onClick={() =>
-                            patch({ baseUrl: preset.baseUrl, model: preset.model })
-                          }
-                        >
-                          {preset.label}
-                          {active && <IconCheck size={12} />}
-                        </button>
-                      );
-                    })}
-                  </div>
+              <div className="settings-practice__row">
+                <div className="settings-practice__text">
+                  <span className="label">自动讲解</span>
+                  <span className="hint">答错时自动生成错因、记忆点与改进建议。</span>
                 </div>
-              )}
-
-              <label className="field">
-                <span className="label">
-                  接口地址 Base URL
-                  <span className="mono-label">API ENDPOINT</span>
-                </span>
-                <input
-                  className="input"
-                  value={draft.baseUrl}
-                  onChange={(event) => patch({ baseUrl: event.target.value })}
-                  placeholder="https://api.openai.com/v1"
-                  spellCheck={false}
-                  autoComplete="off"
-                />
-                <span className="hint">
-                  {draft.provider === 'anthropic'
-                    ? '填写 Claude 接口地址，程序会自动拼接 /messages；浏览器直连会自动携带所需请求头。'
-                    : '填到版本号即可（如 /v1），程序会自动拼接 /chat/completions。DeepSeek、Moonshot、硅基流动、Ollama 等兼容服务均可使用。'}
-                </span>
-              </label>
-
-              <div className="field-row">
-                <label className="field">
-                  <span className="label">模型</span>
-                  <input
-                    className="input"
-                    list="deepword-model-options"
-                    value={draft.model}
-                    onChange={(event) => patch({ model: event.target.value })}
-                    placeholder={providerPreset.model}
-                    spellCheck={false}
-                    autoComplete="off"
-                  />
-                  <datalist id="deepword-model-options">
-                    {modelOptions.map((model) => (
-                      <option key={model} value={model} />
-                    ))}
-                  </datalist>
-                </label>
-
-                <label className="field">
-                  <span className="label">
-                    API Key
-                    <span className="hint settings-inline-hint">
-                      {draft.provider === 'openai' ? '本地模型可留空' : '必填'}
-                    </span>
-                  </span>
-                  <span className="settings-key">
-                    <input
-                      className="input"
-                      type={showKey ? 'text' : 'password'}
-                      value={draft.apiKey}
-                      onChange={(event) => patch({ apiKey: event.target.value })}
-                      placeholder="sk-..."
-                      spellCheck={false}
-                      autoComplete="off"
-                    />
-                    <button
-                      type="button"
-                      className="icon-btn settings-key__toggle"
-                      onClick={() => setShowKey((current) => !current)}
-                      aria-label={showKey ? '隐藏 API Key' : '显示 API Key'}
-                    >
-                      <IconEyeToggle size={16} />
-                    </button>
-                  </span>
-                </label>
-              </div>
-
-              <div className="settings-tuning">
-                <label className="field settings-range">
-                  <span className="label">
-                    温度 Temperature
-                    <span className="settings-range__value">{draft.temperature.toFixed(1)}</span>
-                  </span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1.5}
-                    step={0.1}
-                    value={draft.temperature}
-                    onChange={(event) => patch({ temperature: Number(event.target.value) })}
-                  />
-                  <span className="hint">越低越稳定，出题更守规矩；越高越有变化，但更易跑题。</span>
-                </label>
-
-                <label className="field settings-max-tokens">
-                  <span className="label">最大输出 Tokens</span>
-                  <input
-                    className="input"
-                    type="number"
-                    min={256}
-                    max={16000}
-                    step={100}
-                    value={draft.maxTokens}
-                    onChange={(event) =>
-                      patch({ maxTokens: Math.max(64, Number(event.target.value) || 64) })
-                    }
-                  />
-                  <span className="hint">一次生成 6~8 道练习，建议 2000~4000。</span>
-                </label>
-              </div>
-
-              {test.status === 'done' && (
-                <div
-                  className={
-                    test.result.ok ? 'callout settings-test-result' : 'callout callout--error settings-test-result'
-                  }
-                >
-                  <div>
-                    <span className="callout__title">
-                      {test.result.ok ? '连接成功' : '连接失败'}
-                      {test.result.ok && (
-                        <span className="settings-test-latency">
-                          {' '}
-                          · {formatLatency(test.result.latencyMs)}
-                          {test.result.model ? ` · ${test.result.model}` : ''}
-                        </span>
-                      )}
-                    </span>
-                    <p className="settings-test-message">{test.result.message}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="settings-actions">
                 <button
                   type="button"
-                  className="btn btn--ghost"
-                  onClick={() => void runTest()}
-                  disabled={test.status === 'testing'}
-                >
-                  {test.status === 'testing' ? (
-                    <>
-                      <span className="spinner" /> 正在连接…
-                    </>
-                  ) : (
-                    <>
-                      <IconRefresh size={15} /> 测试连接
-                    </>
-                  )}
-                </button>
-                <button type="button" className="btn btn--primary" onClick={save} disabled={!dirty}>
-                  {dirty ? '保存设置' : '设置已保存'}
-                </button>
+                  role="switch"
+                  aria-checked={practice.autoExplain}
+                  aria-label="自动讲解"
+                  className="switch"
+                  onClick={() => updatePractice({ autoExplain: !practice.autoExplain })}
+                />
               </div>
 
-              <p className="settings-note">
-                <strong>安全提示：</strong>API Key 仅保存在本机 localStorage 中，不会上传到任何第三方。
-                浏览器直连第三方接口可能受 CORS 限制；若连接失败，请确认服务支持浏览器跨域请求，或使用本地代理。
-              </p>
+              <hr className="divider" />
+
+              <div className="field settings-range">
+                <span className="label">
+                  <span>发音语速</span>
+                  <span className="settings-range__value">{practice.tts.rate.toFixed(1)}×</span>
+                </span>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2}
+                  step={0.1}
+                  value={practice.tts.rate}
+                  onChange={(event) => updateTts({ rate: Number(event.target.value) })}
+                  aria-label="发音语速"
+                />
+                <span className="hint">0.5 最慢、2 最快；听音题与自动朗读都用这个语速。</span>
+              </div>
+
+              <div className="field">
+                <label className="label" htmlFor="practice-tts-voice">
+                  英文语音
+                </label>
+                <select
+                  id="practice-tts-voice"
+                  className="select"
+                  value={practice.tts.voiceUri}
+                  disabled={voices.length === 0}
+                  onChange={(event) => updateTts({ voiceUri: event.target.value })}
+                >
+                  <option value="">自动选择（系统默认英文语音）</option>
+                  {voices.map((voice) => (
+                    <option key={voice.voiceUri} value={voice.voiceUri}>
+                      {voice.name} · {voice.lang}
+                    </option>
+                  ))}
+                </select>
+                <span className="hint">
+                  {voices.length > 0
+                    ? `检测到 ${voices.length} 个英文语音，可挑一个顺耳的。`
+                    : '当前浏览器没有可用的英文语音，听音题会暂时不出现；换用 Chrome / Edge / Safari 可恢复。'}
+                </span>
+              </div>
+
+              <div className="settings-practice__row">
+                <div className="settings-practice__text">
+                  <span className="label">自动朗读</span>
+                  <span className="hint">进入练习时自动朗读单词与例句。</span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={practice.tts.autoPlay}
+                  aria-label="自动朗读发音"
+                  className="switch"
+                  onClick={() => updateTts({ autoPlay: !practice.tts.autoPlay })}
+                />
+              </div>
             </div>
           </section>
 
           <section className="card settings-card">
             <header className="settings-card__head">
-              <span className="settings-card__index">贰</span>
+              <span className="settings-card__index">叁</span>
               <div>
                 <h2 className="settings-card__title">数据管理</h2>
                 <p className="settings-card__sub">数据只存在这个浏览器里。请定期导出备份。</p>
@@ -409,6 +544,7 @@ export default function SettingsView() {
                   <p className="settings-data-row__title">本机存储</p>
                   <p className="settings-data-row__desc">
                     已占用 {usage.human} · {data.words.length} 个词条 · {data.attempts.length} 条作答记录
+                    · {data.providers.length} 份配置
                   </p>
                 </div>
                 <span className="badge badge--outline">localStorage</span>
@@ -456,7 +592,7 @@ export default function SettingsView() {
               <div className="settings-danger">
                 <div>
                   <p className="settings-data-row__title">清空学习进度</p>
-                  <p className="settings-data-row__desc">保留词库与设置，重置所有卡片、错题与统计。</p>
+                  <p className="settings-data-row__desc">保留词库、模型配置与主题，重置所有卡片、错题与统计。</p>
                   <button
                     type="button"
                     className="btn btn--danger btn--sm"
@@ -484,7 +620,7 @@ export default function SettingsView() {
         <div className="settings-col settings-col--side">
           <section className="card settings-card">
             <header className="settings-card__head">
-              <span className="settings-card__index">叁</span>
+              <span className="settings-card__index">肆</span>
               <div>
                 <h2 className="settings-card__title">外观</h2>
                 <p className="settings-card__sub">纸与墨，各有适合的时刻。</p>
@@ -526,7 +662,7 @@ export default function SettingsView() {
 
           <section className="card settings-card settings-about">
             <header className="settings-card__head">
-              <span className="settings-card__index">肆</span>
+              <span className="settings-card__index">伍</span>
               <div>
                 <h2 className="settings-card__title">关于词渊</h2>
                 <p className="settings-card__sub">以错题为师，以温故为舟。</p>
@@ -537,13 +673,31 @@ export default function SettingsView() {
                 <span className="seal">渊</span>
                 <div>
                   <strong>词渊 DeepWord</strong>
-                  <span>v1.0.0 · 本地优先的 LLM 背单词工作台</span>
+                  <span>v{APP_VERSION} · 本地优先的 LLM 背单词工作台</span>
                 </div>
               </div>
               <ul className="settings-about__list">
                 <li>
                   <span>出题引擎</span>
                   <strong>OpenAI 兼容 / Anthropic</strong>
+                </li>
+                <li>
+                  <span>当前配置</span>
+                  <strong className="settings-about__summary">
+                    {activeProfile
+                      ? `${providerName(activeProfile, activeIndex)} · ${providerSummaryText(activeProfile)}`
+                      : '尚未配置'}
+                  </strong>
+                </li>
+                <li>
+                  <span>思考开关</span>
+                  <strong className="settings-about__summary">
+                    {activeProfile
+                      ? `${thinkingModeLabel(activeProfile.thinkingMode)}${
+                          activeProfile.thinkingMode === 'off' ? '（部分模型可能不生效）' : ''
+                        }`
+                      : '—'}
+                  </strong>
                 </li>
                 <li>
                   <span>提示词版本</span>
@@ -559,7 +713,7 @@ export default function SettingsView() {
                 </li>
               </ul>
               <p className="settings-about__privacy">
-                你的单词、错题与 API Key 都只保存在本机。应用没有后台服务器，不会收集任何学习数据。
+                你的单词、错题、模型配置与 API Key 都只保存在本机。应用没有后台服务器，不会收集任何学习数据。
                 清除浏览器数据或使用无痕模式会导致记录丢失。
               </p>
               <div className="settings-about__foot">
@@ -572,12 +726,28 @@ export default function SettingsView() {
       </div>
 
       <ConfirmDialog
+        open={deleteTarget !== null}
+        title="删除这份配置？"
+        message={
+          <>
+            将删除「{deleteTarget?.name.trim() || '未命名配置'}」及其保存的 API Key。
+            {deleteTarget && deleteTarget.id === data.activeProviderId
+              ? '这是当前使用的配置，删除后会切换到列表中的第一份；没有其它配置时，AI 功能会退回本地题库。'
+              : '此操作不可撤销。'}
+          </>
+        }
+        confirmLabel="删除配置"
+        danger
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+      />
+      <ConfirmDialog
         open={dialog === 'import'}
         title="导入备份？"
         message={
           <>
-            将用备份中的词库与学习记录<strong>覆盖当前全部数据</strong>，当前 API Key 会被保留。
-            导入后无法撤销，建议先导出一份当前备份。
+            将用备份中的词库、学习记录与模型配置<strong>覆盖当前数据</strong>；备份中缺失的 API Key
+            会按 Base URL 继承本机已有 Key。导入后无法撤销，建议先导出一份当前备份。
           </>
         }
         confirmLabel="覆盖并导入"
@@ -588,7 +758,7 @@ export default function SettingsView() {
       <ConfirmDialog
         open={dialog === 'clear-progress'}
         title="清空学习进度？"
-        message="所有卡片排程、错题档案、作答历史与统计都会被清空，词库与模型设置保留。此操作不可撤销。"
+        message="所有卡片排程、错题档案、作答历史与统计都会被清空，词库、模型配置与主题保留。此操作不可撤销。"
         confirmLabel="清空进度"
         danger
         onClose={() => setDialog(null)}
@@ -597,7 +767,7 @@ export default function SettingsView() {
       <ConfirmDialog
         open={dialog === 'reset-all'}
         title="恢复初始数据？"
-        message="将删除所有自建词条与学习进度，并载入内置示例词库。模型设置与主题会保留。此操作不可撤销。"
+        message="将删除所有自建词条与学习进度，并载入内置示例词库。模型配置与主题会保留。此操作不可撤销。"
         confirmLabel="恢复初始数据"
         danger
         onClose={() => setDialog(null)}

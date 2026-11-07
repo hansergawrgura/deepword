@@ -21,21 +21,31 @@ import type {
   ExerciseSource,
   ExerciseType,
   Grade,
-  LLMSettings,
+  MasteryRecord,
+  PracticeSessionState,
+  PracticeSettings,
+  ProviderDraft,
+  ProviderProfile,
+  Skill,
   ThemeMode,
   ToastMessage,
   ToastTone,
+  TranslationVerdict,
   WordInput,
 } from '../types';
+import { MAX_MODELS_PER_PROVIDER, MAX_PROVIDERS } from '../types';
+import { VENDOR_OPTIONS, inferVendorFromBaseUrl, normalizeAppShape, preserveApiKeys } from '../lib/providerModel';
 import {
   createInitialData,
   loadData,
   makeWord,
+  normalizePracticeSettings,
   normalizeWord,
   resetProgress,
   saveData,
 } from '../lib/storage';
-import { createCard, gradeCard } from '../lib/srs';
+import { evaluateMastery } from '../lib/mastery';
+import { createCard, gradeCard, MASTERED_INTERVAL } from '../lib/srs';
 import { recordDailyEvent } from '../lib/stats';
 import { clamp, uid } from '../lib/utils';
 
@@ -50,17 +60,36 @@ type Action =
       exerciseType: ExerciseType;
       source: ExerciseSource;
       prompt?: string;
+      /** Phase B：技能维度（薄弱分析与掌握判定用）。 */
+      skill?: Skill;
+      latencyMs?: number;
+      verdict?: TranslationVerdict;
+      aiFeedback?: string;
+      aiImprovement?: string;
+      aiStatus?: 'ok' | 'failed' | 'local-fallback';
+      /** Phase B：所属学习轮次。 */
+      roundId?: string;
       now: number;
     }
   | { type: 'ADD_WORD'; input: WordInput; now: number }
   | { type: 'UPDATE_WORD'; id: string; input: Partial<WordInput> }
   | { type: 'DELETE_WORD'; id: string }
   | { type: 'IMPORT_WORDS'; inputs: WordInput[]; now: number }
-  | { type: 'UPDATE_SETTINGS'; patch: Partial<LLMSettings> }
+  | { type: 'ADD_PROVIDER'; id: string; draft: ProviderDraft; now: number }
+  | { type: 'UPDATE_PROVIDER'; id: string; patch: ProviderDraft; now: number }
+  | { type: 'DELETE_PROVIDER'; id: string; now: number }
+  | { type: 'SET_ACTIVE_PROVIDER'; id: string | null; now: number }
   | { type: 'SET_THEME'; theme: ThemeMode }
   | { type: 'IMPORT_DATA'; data: AppData; now: number }
   | { type: 'RESET_ALL'; now: number }
-  | { type: 'CLEAR_PROGRESS'; now: number };
+  | { type: 'CLEAR_PROGRESS'; now: number }
+  /* ---- Phase B ---- */
+  | { type: 'SET_SESSION'; session: PracticeSessionState | null }
+  | { type: 'SET_PRACTICE_SETTINGS'; patch: Partial<PracticeSettings> }
+  | { type: 'MARK_MASTERED'; wordId: string; source: MasteryRecord['source']; now: number }
+  | { type: 'UNMARK_MASTERED'; wordId: string; now: number }
+  | { type: 'FLAG_REVIEW_PRIORITY'; wordId: string; now: number }
+  | { type: 'CLEAR_REVIEW_PRIORITY'; wordId: string };
 
 function ensureCard(data: AppData, wordId: string, now: number) {
   return data.srs[wordId] ?? createCard(wordId, now);
@@ -106,6 +135,35 @@ function withWordsData(data: AppData, words: AppData['words'], now: number): App
     if (!srs[word.id]) srs[word.id] = createCard(word.id, now);
   }
   return { ...data, words, srs };
+}
+
+const VENDOR_VALUES = VENDOR_OPTIONS.map((item) => item.value);
+
+/** 清洗 provider 草稿：保证字段类型、范围、去重都合规。 */
+function cleanProviderDraft(draft: ProviderDraft, base?: ProviderProfile): ProviderDraft {
+  const protocol = draft.protocol === 'anthropic' ? 'anthropic' : 'openai';
+  const baseUrl = draft.baseUrl.trim();
+  const vendor = VENDOR_VALUES.includes(draft.vendor)
+    ? draft.vendor
+    : inferVendorFromBaseUrl(baseUrl, protocol);
+  const models = Array.isArray(draft.models)
+    ? Array.from(new Set(draft.models.map((model) => model.trim()).filter(Boolean))).slice(
+        0,
+        MAX_MODELS_PER_PROVIDER,
+      )
+    : [];
+  return {
+    name: (draft.name ?? base?.name ?? '').trim().slice(0, 40),
+    protocol,
+    vendor,
+    baseUrl,
+    apiKey: typeof draft.apiKey === 'string' ? draft.apiKey : '',
+    models,
+    defaultModel: (draft.defaultModel ?? '').trim(),
+    temperature: clamp(Number(draft.temperature) || 0.7, 0, 2),
+    maxTokens: Math.round(clamp(Number(draft.maxTokens) || 2_500, 64, 32_000)),
+    thinkingMode: draft.thinkingMode === 'provider-default' ? 'provider-default' : 'off',
+  };
 }
 
 function reducer(data: AppData, action: Action): AppData {
@@ -155,6 +213,13 @@ function reducer(data: AppData, action: Action): AppData {
         correct: action.correct,
         exerciseType: action.exerciseType,
         source: action.source,
+        skill: action.skill,
+        latencyMs: action.latencyMs,
+        verdict: action.verdict,
+        aiFeedback: action.aiFeedback,
+        aiImprovement: action.aiImprovement,
+        aiStatus: action.aiStatus,
+        roundId: action.roundId,
         createdAt: action.now,
       };
       const mistakes = { ...data.mistakes };
@@ -170,11 +235,39 @@ function reducer(data: AppData, action: Action): AppData {
           action.prompt,
         );
       }
+
+      const attempts = pushAttempt(data, attempt);
+      // 掌握判定：满足规则则自动标记掌握（永久不再学习与复习）。
+      const mastery = { ...(data.mastery ?? {}) };
+      if (!mastery[action.wordId]) {
+        const check = evaluateMastery({ ...data, attempts }, action.wordId, action.now);
+        if (check.eligible) {
+          mastery[action.wordId] = {
+            wordId: action.wordId,
+            masteredAt: action.now,
+            source: 'rule',
+          };
+        }
+      }
+      const mastered = Boolean(mastery[action.wordId]);
+      const srs = mastered
+        ? {
+            ...data.srs,
+            [action.wordId]: {
+              ...nextCard,
+              status: 'mastered' as const,
+              interval: Math.max(nextCard.interval, MASTERED_INTERVAL),
+              dueAt: action.now + MASTERED_INTERVAL * 86_400_000,
+            },
+          }
+        : { ...data.srs, [action.wordId]: nextCard };
+
       return {
         ...data,
-        srs: { ...data.srs, [action.wordId]: nextCard },
-        attempts: pushAttempt(data, attempt),
+        srs,
+        attempts,
         mistakes,
+        mastery,
         stats: recordDailyEvent(data.stats, { now: action.now, correct: action.correct }),
         updatedAt: action.now,
       };
@@ -260,29 +353,149 @@ function reducer(data: AppData, action: Action): AppData {
       };
     }
 
-    case 'UPDATE_SETTINGS': {
-      const merged: LLMSettings = {
-        ...data.settings,
-        ...action.patch,
+    case 'ADD_PROVIDER': {
+      if (data.providers.length >= MAX_PROVIDERS) return data;
+      const clean = cleanProviderDraft(action.draft);
+      const profile: ProviderProfile = {
+        ...clean,
+        id: action.id,
+        createdAt: action.now,
+        updatedAt: action.now,
       };
-      const settings: LLMSettings = {
-        ...merged,
-        temperature: clamp(Number(merged.temperature) || 0, 0, 2),
-        maxTokens: Math.round(clamp(Number(merged.maxTokens) || 1_000, 64, 32_000)),
+      return {
+        ...data,
+        providers: [...data.providers, profile],
+        activeProviderId: data.activeProviderId ?? profile.id,
+        updatedAt: action.now,
       };
-      return { ...data, settings, updatedAt: Date.now() };
+    }
+
+    case 'UPDATE_PROVIDER': {
+      const current = data.providers.find((item) => item.id === action.id);
+      if (!current) return data;
+      const clean = cleanProviderDraft(action.patch, current);
+      return {
+        ...data,
+        providers: data.providers.map((item) =>
+          item.id === action.id ? { ...item, ...clean, updatedAt: action.now } : item,
+        ),
+        updatedAt: action.now,
+      };
+    }
+
+    case 'DELETE_PROVIDER': {
+      if (!data.providers.some((item) => item.id === action.id)) return data;
+      const providers = data.providers.filter((item) => item.id !== action.id);
+      const activeProviderId =
+        data.activeProviderId === action.id ? (providers[0]?.id ?? null) : data.activeProviderId;
+      return { ...data, providers, activeProviderId, updatedAt: action.now };
+    }
+
+    case 'SET_ACTIVE_PROVIDER': {
+      const activeProviderId =
+        action.id && data.providers.some((item) => item.id === action.id)
+          ? action.id
+          : (data.providers[0]?.id ?? null);
+      return { ...data, activeProviderId, updatedAt: action.now };
     }
 
     case 'SET_THEME':
       return { ...data, theme: action.theme };
 
-    case 'IMPORT_DATA':
-      return { ...action.data, updatedAt: action.now };
+    /* -------------------------- Phase B -------------------------- */
+
+    case 'SET_SESSION':
+      return { ...data, session: action.session };
+
+    case 'SET_PRACTICE_SETTINGS': {
+      const patch = action.patch ?? {};
+      const next: PracticeSettings = normalizePracticeSettings({
+        ...data.practice,
+        ...patch,
+        tts: { ...data.practice.tts, ...(patch.tts ?? {}) },
+      });
+      return { ...data, practice: next, updatedAt: Date.now() };
+    }
+
+    case 'MARK_MASTERED': {
+      if (!data.words.some((word) => word.id === action.wordId)) return data;
+      const mastery = { ...(data.mastery ?? {}) };
+      mastery[action.wordId] = {
+        wordId: action.wordId,
+        masteredAt: action.now,
+        source: action.source,
+      };
+      const card = ensureCard(data, action.wordId, action.now);
+      const reviewPriority = { ...(data.reviewPriority ?? {}) };
+      delete reviewPriority[action.wordId];
+      return {
+        ...data,
+        mastery,
+        reviewPriority,
+        srs: {
+          ...data.srs,
+          [action.wordId]: {
+            ...card,
+            status: 'mastered',
+            interval: Math.max(card.interval, MASTERED_INTERVAL),
+            dueAt: action.now + MASTERED_INTERVAL * 86_400_000,
+          },
+        },
+        updatedAt: action.now,
+      };
+    }
+
+    case 'UNMARK_MASTERED': {
+      const mastery = { ...(data.mastery ?? {}) };
+      if (!mastery[action.wordId]) return data;
+      delete mastery[action.wordId];
+      const card = ensureCard(data, action.wordId, action.now);
+      return {
+        ...data,
+        mastery,
+        srs: {
+          ...data.srs,
+          [action.wordId]: {
+            ...card,
+            status: card.reps > 0 ? 'review' : 'new',
+            interval: 0,
+            dueAt: action.now,
+          },
+        },
+        updatedAt: action.now,
+      };
+    }
+
+    case 'FLAG_REVIEW_PRIORITY': {
+      if (!data.words.some((word) => word.id === action.wordId)) return data;
+      const reviewPriority = { ...(data.reviewPriority ?? {}) };
+      reviewPriority[action.wordId] = action.now;
+      return { ...data, reviewPriority, updatedAt: action.now };
+    }
+
+    case 'CLEAR_REVIEW_PRIORITY': {
+      const reviewPriority = { ...(data.reviewPriority ?? {}) };
+      if (!(action.wordId in reviewPriority)) return data;
+      delete reviewPriority[action.wordId];
+      return { ...data, reviewPriority, updatedAt: Date.now() };
+    }
+
+    case 'IMPORT_DATA': {
+      const next = normalizeAppShape(action.data);
+      const providers = preserveApiKeys(next.providers, data.providers);
+      return { ...next, providers, updatedAt: action.now };
+    }
 
     case 'RESET_ALL': {
-      // 重置词库与进度，但保留用户已经配置好的模型连接与主题
+      // 重置词库与进度，但保留用户已经配置好的 provider 与主题
       const fresh = createInitialData(action.now);
-      return { ...fresh, settings: data.settings, theme: data.theme };
+      return {
+        ...fresh,
+        providers: data.providers,
+        activeProviderId: data.activeProviderId,
+        practice: data.practice,
+        theme: data.theme,
+      };
     }
 
     case 'CLEAR_PROGRESS': {
@@ -303,16 +516,40 @@ export interface AppActions {
     exerciseType: ExerciseType;
     source: ExerciseSource;
     prompt?: string;
+    /** Phase B：技能维度（薄弱分析、掌握判定）。 */
+    skill?: Skill;
+    latencyMs?: number;
+    verdict?: TranslationVerdict;
+    aiFeedback?: string;
+    aiImprovement?: string;
+    aiStatus?: 'ok' | 'failed' | 'local-fallback';
+    /** Phase B：所属学习轮次。 */
+    roundId?: string;
   }) => void;
   addWord: (input: WordInput) => { ok: boolean; message: string };
   updateWord: (id: string, input: Partial<WordInput>) => { ok: boolean; message: string };
   deleteWord: (id: string) => void;
   importWords: (inputs: WordInput[]) => { added: number; skipped: number };
-  updateSettings: (patch: Partial<LLMSettings>) => void;
+  addProvider: (draft: ProviderDraft) => { ok: boolean; message: string; id?: string };
+  updateProvider: (id: string, draft: ProviderDraft) => void;
+  deleteProvider: (id: string) => void;
+  setActiveProvider: (id: string | null) => void;
   setTheme: (theme: ThemeMode) => void;
   importBackup: (data: AppData) => void;
   resetAll: () => void;
   clearProgress: () => void;
+  /* ---- Phase B ---- */
+  /** 写回当前一轮练习的进度（退出后可恢复）。 */
+  setPracticeSession: (session: PracticeSessionState | null) => void;
+  /** 局部更新练习设置（设置页即时生效）。 */
+  setPracticeSettings: (patch: Partial<PracticeSettings>) => void;
+  /** 标记掌握：source='manual' 为闪卡闸门确认，'rule' 为规则自动判定。 */
+  markMastered: (wordId: string, source?: MasteryRecord['source']) => void;
+  /** 取消掌握：词回到可复习状态。 */
+  unmarkMastered: (wordId: string) => void;
+  /** 闪卡「不认识」：排入下一轮复习优先。 */
+  flagReviewPriority: (wordId: string) => void;
+  clearReviewPriority: (wordId: string) => void;
   toast: (message: string, tone?: ToastTone) => void;
 }
 
@@ -429,6 +666,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       exerciseType: ExerciseType;
       source: ExerciseSource;
       prompt?: string;
+      skill?: Skill;
+      latencyMs?: number;
+      verdict?: TranslationVerdict;
+      aiFeedback?: string;
+      aiImprovement?: string;
+      aiStatus?: 'ok' | 'failed' | 'local-fallback';
+      roundId?: string;
     }) => {
       dispatch({ type: 'RECORD_EXERCISE', ...result, now: Date.now() });
     },
@@ -502,12 +746,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const updateSettings = useCallback(
-    (patch: Partial<LLMSettings>) => {
-      dispatch({ type: 'UPDATE_SETTINGS', patch });
+  const addProvider = useCallback(
+    (draft: ProviderDraft) => {
+      if (dataRef.current.providers.length >= MAX_PROVIDERS) {
+        return { ok: false, message: `最多保存 ${MAX_PROVIDERS} 份配置` };
+      }
+      if (!draft.defaultModel.trim()) return { ok: false, message: '请填写默认模型' };
+      const id = uid('p');
+      dispatch({ type: 'ADD_PROVIDER', id, draft, now: Date.now() });
+      toast('模型配置已保存', 'success');
+      return { ok: true, message: '已保存', id };
     },
-    [],
+    [toast],
   );
+
+  const updateProvider = useCallback((id: string, draft: ProviderDraft) => {
+    dispatch({ type: 'UPDATE_PROVIDER', id, patch: draft, now: Date.now() });
+  }, []);
+
+  const deleteProvider = useCallback(
+    (id: string) => {
+      const current = dataRef.current.providers.find((item) => item.id === id);
+      dispatch({ type: 'DELETE_PROVIDER', id, now: Date.now() });
+      toast(current ? `已删除「${current.name}」` : '配置已删除', 'success');
+    },
+    [toast],
+  );
+
+  const setActiveProvider = useCallback((id: string | null) => {
+    dispatch({ type: 'SET_ACTIVE_PROVIDER', id, now: Date.now() });
+  }, []);
 
   const setTheme = useCallback((theme: ThemeMode) => {
     dispatch({ type: 'SET_THEME', theme });
@@ -515,15 +783,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const importBackup = useCallback(
     (next: AppData) => {
-      const apiKey = next.settings.apiKey || dataRef.current.settings.apiKey;
-      dispatch({
-        type: 'IMPORT_DATA',
-        data: {
-          ...next,
-          settings: { ...next.settings, apiKey },
-        },
-        now: Date.now(),
-      });
+      // Key 继承在 reducer 内按 Base URL 匹配；备份里带了非空 Key 时以备份为准。
+      dispatch({ type: 'IMPORT_DATA', data: next, now: Date.now() });
       toast('备份已导入', 'success');
     },
     [toast],
@@ -539,6 +800,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toast('学习进度已清空，词库与设置保留', 'success');
   }, [toast]);
 
+  /* -------------------------- Phase B -------------------------- */
+
+  const setPracticeSession = useCallback((session: PracticeSessionState | null) => {
+    dispatch({ type: 'SET_SESSION', session });
+  }, []);
+
+  const setPracticeSettings = useCallback((patch: Partial<PracticeSettings>) => {
+    dispatch({ type: 'SET_PRACTICE_SETTINGS', patch });
+  }, []);
+
+  const markMastered = useCallback(
+    (wordId: string, source: MasteryRecord['source'] = 'manual') => {
+      dispatch({ type: 'MARK_MASTERED', wordId, source, now: Date.now() });
+    },
+    [],
+  );
+
+  const unmarkMastered = useCallback((wordId: string) => {
+    dispatch({ type: 'UNMARK_MASTERED', wordId, now: Date.now() });
+  }, []);
+
+  const flagReviewPriority = useCallback((wordId: string) => {
+    dispatch({ type: 'FLAG_REVIEW_PRIORITY', wordId, now: Date.now() });
+  }, []);
+
+  const clearReviewPriority = useCallback((wordId: string) => {
+    dispatch({ type: 'CLEAR_REVIEW_PRIORITY', wordId });
+  }, []);
+
   const actions = useMemo<AppActions>(
     () => ({
       gradeWord,
@@ -547,11 +837,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateWord,
       deleteWord,
       importWords,
-      updateSettings,
+      addProvider,
+      updateProvider,
+      deleteProvider,
+      setActiveProvider,
       setTheme,
       importBackup,
       resetAll,
       clearProgress,
+      setPracticeSession,
+      setPracticeSettings,
+      markMastered,
+      unmarkMastered,
+      flagReviewPriority,
+      clearReviewPriority,
       toast,
     }),
     [
@@ -561,11 +860,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateWord,
       deleteWord,
       importWords,
-      updateSettings,
+      addProvider,
+      updateProvider,
+      deleteProvider,
+      setActiveProvider,
       setTheme,
       importBackup,
       resetAll,
       clearProgress,
+      setPracticeSession,
+      setPracticeSettings,
+      markMastered,
+      unmarkMastered,
+      flagReviewPriority,
+      clearReviewPriority,
       toast,
     ],
   );

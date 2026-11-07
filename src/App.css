@@ -23,9 +23,7 @@
   animation: fade-up var(--duration-slow) var(--ease-out) both;
 }
 
-.app-view {
-  min-height: calc(100dvh - 180px);
-}
+/* .app-view 的布局统一定义在 styles/ui.css 的「统一舞台布局」区块 */
 
 .app-footer {
   display: flex;
@@ -34,8 +32,9 @@
   gap: 16px;
   width: 100%;
   max-width: var(--content-max);
-  margin: 40px auto 0;
-  padding: 18px 0 22px;
+  /* 顶部内容压缩后留出更多可视区，避免小高度窗口多出几像素滚动 */
+  margin: 24px auto 0;
+  padding: 14px 0 18px;
   border-top: 1px solid var(--line);
   font-family: var(--font-mono);
   font-size: 9px;

@@ -8,7 +8,23 @@
   --study-paper-line: rgba(29, 28, 24, 0.035);
   --study-card-line: rgba(29, 28, 24, 0.13);
   --study-card-inner-line: rgba(29, 28, 24, 0.09);
-  padding-bottom: 32px;
+
+  /* 中间内容区的几何参数：所有状态、所有题型共用同一组数值。
+     --study-pane-pad 同时也是每个阶段容器（纸面 / 题目卡 / 成绩单 /
+     闪卡 / 闸门）四边统一的内边距。 */
+  --study-pane-pad: 24px;
+  --study-progress-slot: 40px;
+  --feedback-width: 320px;
+  --feedback-gap: 20px;
+
+  /* 顶部进度条常驻占位，工具条与舞台的纵坐标就不随轮次状态变化 */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--study-progress-slot) 0 0;
 }
 
 [data-theme='dark'] .study {
@@ -39,10 +55,13 @@
 
 .study-sheet {
   position: relative;
-  display: grid;
-  grid-template-columns: 62px minmax(0, 1fr);
-  max-width: 900px;
-  margin: 0 auto;
+  /* 宽高边界由 .view-stage--fixed 统一给定；这里只负责填满它 */
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
   background-color: var(--card-solid);
@@ -57,8 +76,8 @@
 
 .study-sheet__seal {
   position: absolute;
-  top: 24px;
-  right: 26px;
+  top: var(--study-pane-pad);
+  right: var(--study-pane-pad);
   z-index: 2;
   width: 34px;
   height: 34px;
@@ -71,47 +90,21 @@
     0 1px 0 rgba(45, 39, 26, 0.1);
 }
 
-/* 左侧页边：竖排日期，像旧书的天头地脚 */
-.study-sheet__margin {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 30px 0;
-  border-right: 1px solid var(--line-strong);
-  background: var(--paper);
-}
-
-.study-sheet__margin-date {
-  writing-mode: vertical-rl;
-  font-family: var(--font-display);
-  font-size: 14px;
-  letter-spacing: 0.34em;
-  color: var(--ink-soft);
-}
-
-.study-sheet__margin-rule {
-  width: 1px;
-  height: 34px;
-  background: var(--vermilion-line);
-}
-
-.study-sheet__margin-week {
-  writing-mode: vertical-rl;
-  font-family: var(--font-display);
-  font-size: 11px;
-  letter-spacing: 0.24em;
-  color: var(--ink-ghost);
-}
-
 .study-sheet__body {
   position: relative;
+  flex: 1 1 0;
+  min-height: 0;
   min-width: 0;
-  padding: 30px 34px 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: var(--stage-justify);
+  overflow-y: auto;
+  /* 四边统一内边距：与题目卡 / 成绩单 / 闪卡完全一致 */
+  padding: var(--study-pane-pad);
 }
 
 .study-sheet__head {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   padding-right: 58px;
 }
 
@@ -135,7 +128,7 @@
 .study-figures {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 22px 0 20px;
+  padding: 14px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
@@ -215,8 +208,8 @@
   align-items: flex-end;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 26px;
-  margin-top: 26px;
+  gap: 18px;
+  margin-top: 18px;
 }
 
 .study-setup__mode {
@@ -330,80 +323,9 @@
   color: var(--ink-ghost);
 }
 
-.study-track {
-  max-width: 780px;
-  margin: 0 auto 22px;
-}
-
-.study-track .progress {
-  height: 3px;
-  border-radius: 3px;
-  background: var(--line);
-}
-
-.study-track .progress__bar {
-  background: var(--vermilion);
-}
-
-.study-track__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px 18px;
-  margin-top: 10px;
-}
-
-.study-tallies {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.study-tally {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  letter-spacing: 0.03em;
-  color: var(--ink-faint);
-  font-variant-numeric: tabular-nums;
-}
-
-.study-tally::before {
-  content: '';
-  width: 5px;
-  height: 5px;
-  flex: none;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.9;
-}
-
-.study-tally--good {
-  color: var(--sage);
-}
-
-.study-tally--hard {
-  color: var(--gold);
-}
-
-.study-tally--again {
-  color: var(--vermilion);
-}
-
-.study-track__mode {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
-  color: var(--ink-ghost);
-}
-
-.study-stage {
-  max-width: 780px;
-  margin: 0 auto;
-}
+/* 旧的 .study-track / .study-tally 与 .study-stage 已废弃：
+   这些 v1 时代各自限宽居中的规则全部由 styles/ui.css 的
+   .view-stage / .view-stage__inner 统一接管。 */
 
 .study-placeholder {
   padding: 80px 0;
@@ -418,7 +340,8 @@
 
 .study-card-stage {
   position: relative;
-  margin: 0 2px 32px;
+  /* 去掉左右 2px 与底部 32px 的零散边距：闸门阶段与其它阶段对齐 */
+  margin: 0 0 20px;
   perspective: 2200px;
 }
 
@@ -923,9 +846,15 @@
 
 .study-report {
   position: relative;
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 30px 34px 32px;
+  /* 与所有阶段共用固定外框；内容超高在框内滚动，不改变边界 */
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: var(--stage-justify);
+  overflow-y: auto;
+  padding: var(--study-pane-pad);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
   background-color: var(--card-solid);
@@ -939,8 +868,8 @@
 
 .study-report__seal {
   position: absolute;
-  top: 24px;
-  right: 28px;
+  top: var(--study-pane-pad);
+  right: var(--study-pane-pad);
   z-index: 1;
   width: 46px;
   height: 46px;
@@ -1048,77 +977,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.study-report__grades {
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  margin: 22px 0 0;
-  padding: 0;
-}
-
-.study-report__grade {
-  --tone: var(--ink-ghost);
-  display: grid;
-  grid-template-columns: 84px minmax(0, 1fr) 92px;
-  align-items: center;
-  gap: 16px;
-}
-
-.study-report__grade.is-again {
-  --tone: var(--vermilion);
-}
-
-.study-report__grade.is-hard {
-  --tone: var(--gold);
-}
-
-.study-report__grade.is-good {
-  --tone: var(--sage);
-}
-
-.study-report__grade.is-easy {
-  --tone: var(--ink-faint);
-}
-
-.study-report__grade-label {
-  font-family: var(--font-display);
-  font-size: 13.5px;
-  color: var(--ink-soft);
-  white-space: nowrap;
-}
-
-.study-report__grade-track {
-  height: 3px;
-  border-radius: 2px;
-  background: var(--line);
-  overflow: hidden;
-}
-
-.study-report__grade-track > span {
-  display: block;
-  height: 100%;
-  background: var(--tone);
-  transition: width 520ms var(--ease-out);
-}
-
-.study-report__grade-count {
-  display: inline-flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 8px;
-  font-size: 11.5px;
-  color: var(--ink-faint);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.study-report__grade-count em {
-  font-family: var(--font-mono);
-  font-style: normal;
-  font-size: 10px;
-  color: var(--ink-ghost);
-}
-
 .study-report__review {
   margin-top: 26px;
   padding-top: 20px;
@@ -1209,18 +1067,15 @@
    ================================================================== */
 
 @media (max-width: 900px) {
-  .study-sheet {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .study-sheet__margin {
-    display: none;
-  }
-
-  .study-sheet__body {
-    padding: 26px 24px 28px;
+  /* 断点只改这一个数值，所有阶段容器的四边内边距同步变化 */
+  .study {
+    /* 与 ui.css 里窄屏的 --stage-inset 保持同一个数值 */
+    --study-pane-pad: 16px;
+    padding-top: 0;
+    overflow: visible;
   }
 }
+/* 窄屏的完整降级规则放在文件末尾，避免被后面的基础声明覆盖 */
 
 @media (max-width: 760px) {
   .study-card-stage {
@@ -1296,8 +1151,8 @@
   }
 
   .study-sheet__seal {
-    top: 18px;
-    right: 18px;
+    top: var(--study-pane-pad);
+    right: var(--study-pane-pad);
   }
 
   .study-sheet__head {
@@ -1348,12 +1203,12 @@
   }
 
   .study-report {
-    padding: 24px 20px 26px;
+    padding: var(--study-pane-pad);
   }
 
   .study-report__seal {
-    top: 18px;
-    right: 18px;
+    top: var(--study-pane-pad);
+    right: var(--study-pane-pad);
     width: 38px;
     height: 38px;
     font-size: 21px;
@@ -1371,11 +1226,6 @@
     gap: 14px 26px;
   }
 
-  .study-report__grade {
-    grid-template-columns: 74px minmax(0, 1fr) 78px;
-    gap: 12px;
-  }
-
   .study-report__review-term {
     min-width: 96px;
     font-size: 15px;
@@ -1387,8 +1237,8 @@
 }
 
 @media (max-width: 480px) {
-  .study-sheet__body {
-    padding: 22px 16px 24px;
+  .study {
+    --study-pane-pad: 14px;
   }
 
   .study-figures {
@@ -1463,16 +1313,7 @@
   }
 
   .study-report {
-    padding: 22px 16px 24px;
-  }
-
-  .study-report__grade {
-    grid-template-columns: 68px minmax(0, 1fr) 70px;
-    gap: 10px;
-  }
-
-  .study-report__grade-label {
-    font-size: 12.5px;
+    padding: var(--study-pane-pad);
   }
 
   .study-report__review-row {
@@ -1504,5 +1345,792 @@
   .study .view-actions .btn {
     flex: 0 0 auto;
     padding-inline: 10px;
+  }
+}
+
+/* ==================================================================
+   Phase B · 学习流程（tab / 闸门 / 题目 / 反馈 / 闪卡）
+   ================================================================== */
+
+/* ------------------------------- tab ------------------------------- */
+
+/* ---------------------------- 紧凑顶部 ---------------------------- */
+/* 轮次进度条置顶，下面只留一行工具条：tab / 阶段 / 动作。
+   原先两层 view-head（大标题 + eyebrow + 副标题）已合并到这一行。 */
+
+/* 进度条覆盖在 .study 顶部的常驻占位上：出现 / 消失都不占额外流内高度，
+   工具条与中间舞台的纵坐标因此保持恒定。 */
+.study-progress--top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--study-progress-slot);
+  margin: 0;
+  padding: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.study-progress--top .study-progress__meta {
+  margin-top: 5px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.study-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+  /* 工具条高度恒定，舞台的可用高度也就不随阶段/动作按钮变化 */
+  min-height: 44px;
+  /* 舞台自己的上内边距就是这段留白，不再叠加一层工具条外边距 */
+  margin-bottom: 0;
+}
+
+.study-bar__stage {
+  color: var(--ink-faint);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.study-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ---------------------------- 轮次说明 ---------------------------- */
+
+.study-flow {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.study-flow li::marker {
+  color: var(--vermilion);
+}
+
+/* ---------------------------- 进度条 ---------------------------- */
+
+.study-progress {
+  margin-bottom: 12px;
+}
+
+.study-progress__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 5px;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+}
+
+.study-footnote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+}
+
+/* ---------------------------- 闸门 ---------------------------- */
+
+/* 无边框阶段同样填满固定外框：四边留白统一，超高在框内滚动 */
+.study .view-stage__pane {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--study-pane-pad);
+}
+
+.practice-gate {
+  margin-top: 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  text-align: center;
+}
+
+.practice-gate__ask {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.practice-gate__hint {
+  margin: 10px 0 0;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.practice-gate__actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---------------------------- 题目卡 ---------------------------- */
+
+.practice-card {
+  /* 题目卡永远占满固定外框的左栏：宽、高、边界不随题型 / 作答阶段变化。
+     头部与提示钉在上、操作区钉在下，中间作答区自适应并内部滚动。 */
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: var(--study-pane-pad);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  box-shadow: var(--shadow-sm);
+}
+
+.practice-card__head,
+.practice-card__prompt,
+.practice-card__audio {
+  flex: none;
+}
+
+/* 选项 / 拼写 / 互译：题型之间只换这块内容，锚点保持一致 */
+.practice-card__body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 提交按钮、判分提示与题型说明永远贴在卡片底部同一位置 */
+.practice-card__foot {
+  flex: none;
+}
+
+.practice-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.practice-card__counter {
+  color: var(--ink-faint);
+  font-size: 12.5px;
+}
+
+.practice-card__counter strong {
+  color: var(--ink);
+}
+
+.practice-card__prompt {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.practice-card__audio {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.practice-card__audio-hint {
+  color: var(--ink-faint);
+  font-size: 12.5px;
+}
+
+.practice-card__hint {
+  margin: 14px 0 0;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+}
+
+.practice-card__actions {
+  margin-top: 18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* 选项 */
+
+.practice-options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.practice-option {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--card-solid);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.practice-option:hover:not(:disabled) {
+  border-color: var(--vermilion-line);
+  transform: translateY(-1px);
+}
+
+.practice-option:disabled {
+  cursor: default;
+}
+
+.practice-option__key {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.practice-option__text {
+  min-width: 0;
+}
+
+.practice-option.is-selected {
+  border-color: var(--vermilion);
+  background: var(--vermilion-wash);
+}
+
+.practice-option.is-correct {
+  border-color: var(--sage);
+  background: var(--sage-wash);
+}
+
+.practice-option.is-correct .practice-option__key {
+  border-color: var(--sage);
+  color: var(--sage-deep);
+}
+
+.practice-option.is-wrong {
+  border-color: var(--vermilion);
+  background: var(--vermilion-wash);
+}
+
+.practice-option.is-wrong .practice-option__key {
+  border-color: var(--vermilion);
+  color: var(--vermilion-deep);
+}
+
+/* 输入 */
+
+.practice-input {
+  display: grid;
+  gap: 8px;
+}
+
+/* ------------------------ 反馈：固定双栏 ------------------------ */
+/* 左栏题目卡 + 右栏反馈容器始终是两条固定列：作答前后、不同题型下，
+   列宽、间距、卡片宽高都完全相同，反馈只替换右栏里的内容。
+   没有列宽过渡、没有位移，也就没有缩放 / 偏移 / 跳动。 */
+
+.practice-layout {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--feedback-width);
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--feedback-gap);
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.practice-feedback-pane {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.practice-feedback-panel {
+  flex: 1 1 0;
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--vermilion);
+  border-radius: var(--radius-md);
+  background: var(--card-solid);
+}
+
+/* 未作答时右栏的占位纸面：与反馈容器同尺寸，说明这一栏的用途，
+   保证「作答前 / 作答后」是同一块区域、同一个边界。 */
+.practice-feedback-panel--idle {
+  border-style: dashed;
+  border-color: var(--line);
+  border-left-width: 1px;
+  background: transparent;
+  box-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--study-pane-pad);
+}
+
+.practice-feedback__idle {
+  margin: 0;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--ink-ghost);
+}
+
+.practice-feedback-panel.is-verdict.is-perfect {
+  border-left-color: var(--sage);
+}
+
+.practice-feedback-panel.is-verdict.is-good {
+  border-left-color: var(--gold);
+}
+
+.practice-feedback-panel.is-verdict.is-poor {
+  border-left-color: var(--vermilion);
+}
+
+.practice-feedback {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px 14px;
+}
+
+.practice-feedback__footer {
+  flex: none;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px);
+  background: var(--paper-raised);
+}
+
+.practice-feedback__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.practice-feedback__head strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.practice-feedback__live {
+  color: var(--vermilion);
+  font-size: 12px;
+}
+
+.practice-feedback__badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--gold-wash);
+  color: var(--gold);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.practice-feedback__text {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.practice-feedback__improve {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+.practice-feedback__label {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--vermilion-wash);
+  color: var(--vermilion-deep);
+  font-size: 12px;
+}
+
+.practice-feedback__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.practice-countdown {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.practice-countdown__track {
+  flex: 1 1 auto;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.practice-countdown__track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--vermilion);
+  transition: width 200ms linear;
+}
+
+.practice-countdown__text {
+  flex: none;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.practice-feedback__pending {
+  margin: 16px 0 0;
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+/* 第 1 题附完整词条 */
+
+.practice-wordinfo {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  /* 容器本身已是 card-solid，词条信息换浅一档才分得开 */
+  background: var(--paper-raised);
+}
+
+.practice-wordinfo__title {
+  margin: 0 0 4px;
+  font-family: var(--font-word);
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.practice-wordinfo__meta {
+  margin: 0 0 8px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.practice-wordinfo__meaning {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.practice-wordinfo__example {
+  margin: 10px 0 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--vermilion-line);
+}
+
+.practice-wordinfo__example blockquote {
+  margin: 0;
+  font-family: var(--font-word);
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.practice-wordinfo__example figcaption {
+  margin-top: 4px;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+}
+
+/* ---------------------------- 小结技能分布 ---------------------------- */
+
+.study-report__skills {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.study-report__skill {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.study-report__skill-label {
+  color: var(--ink-soft);
+}
+
+.study-report__skill-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.study-report__skill-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--sage);
+}
+
+.study-report__skill-count {
+  text-align: right;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.study-report__mastered {
+  margin: 16px 0 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--sage-wash);
+  color: var(--sage-deep);
+  font-size: 13.5px;
+}
+
+/* ---------------------------- 移动端 ---------------------------- */
+
+@media (max-width: 760px) {
+  .study-bar {
+    gap: 8px;
+    /* 留白统一由舞台的 --stage-inset / --study-pane-pad 给出 */
+    margin-bottom: 0;
+  }
+
+  .study-bar__stage {
+    font-size: 11.5px;
+  }
+
+  .practice-card {
+    padding: var(--study-pane-pad);
+  }
+
+  .practice-card__prompt {
+    font-size: 17px;
+  }
+
+  .practice-feedback__actions {
+    flex-direction: column-reverse;
+  }
+
+  .practice-feedback__actions .btn {
+    width: 100%;
+  }
+
+  .study-report__skill {
+    grid-template-columns: 64px minmax(0, 1fr) 48px;
+    gap: 8px;
+  }
+}
+
+/* 成绩单里的讲解回看 */
+
+.study-report__review-note {
+  flex-basis: 100%;
+  margin: 2px 0 4px;
+  padding-left: 10px;
+  border-left: 2px solid var(--vermilion-line);
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+/* --------------------- 计划屏：继续上一轮 --------------------- */
+
+.study-resume {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius-md);
+  background: var(--paper-raised);
+}
+
+.study-resume__title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.study-resume__desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--ink-faint);
+}
+
+.study-resume__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* --------------------- 反馈容器的响应式 --------------------- */
+/* 放在文件末尾，确保能覆盖上面的基础布局声明。 */
+
+@media (max-width: 1200px) {
+  .practice-layout {
+    --feedback-width: 280px;
+    --feedback-gap: 16px;
+  }
+}
+
+@media (max-width: 1040px) and (min-width: 901px) {
+  .practice-layout {
+    --feedback-width: 240px;
+  }
+}
+
+@media (max-width: 900px) {
+  /* 并排空间不够：改为上下堆叠，题目卡仍占满整行（作答前后同宽） */
+  .practice-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 14px;
+    height: auto;
+    overflow: visible;
+  }
+
+  .practice-card {
+    height: auto;
+    overflow: visible;
+  }
+
+  .practice-card__body {
+    overflow: visible;
+  }
+
+  /* 窄屏堆叠时未作答不占位：反馈出现时两栏宽度依旧不变 */
+  .practice-feedback-pane.is-idle {
+    display: none;
+  }
+
+  .practice-feedback-pane {
+    height: auto;
+    overflow: visible;
+  }
+
+  .practice-feedback-panel {
+    height: auto;
+    max-height: none;
+  }
+
+  .practice-feedback {
+    overflow-y: visible;
+  }
+
+  /* 窄屏交回自然高度：否则固定高度 + flex-basis:0 会把纸面折成一条。
+     注意这里位于文件末尾，能覆盖前面所有基础声明。 */
+  .study > .study-progress--top {
+    position: static;
+    height: auto;
+    padding-bottom: 12px;
+  }
+
+  .study-sheet,
+  .study-report,
+  .study .view-stage__pane {
+    height: auto;
+    overflow: visible;
+  }
+
+  .study-sheet__body,
+  .practice-card__body {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 760px) {
+  .practice-feedback {
+    padding: 14px 14px 12px;
+  }
+
+  .practice-feedback__footer {
+    padding: 12px 14px 14px;
+  }
+
+  .study-resume {
+    padding: 12px 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .practice-countdown {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .practice-countdown__text {
+    font-size: 11px;
   }
 }
