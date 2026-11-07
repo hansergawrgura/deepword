@@ -15,7 +15,7 @@
  *   用于在无 TTS / 无 AI / 无例句时仍能尽量补齐 4~8 题的题量。
  */
 
-import type { Exercise, ExerciseType, PracticeSettings, Skill, Word } from '../types';
+import type { PracticeSettings, Question, Skill, Word } from './types';
 import { normalizeAnswer, uid } from './utils';
 
 /** 六个记忆技能，顺序固定（薄弱分析的仪表盘也按此顺序展示）。 */
@@ -26,8 +26,6 @@ export interface SkillMeta {
   label: string;
   /** 「英→中」「中→英」等短标签 */
   short: string;
-  /** 生成的 ExerciseType */
-  type: ExerciseType;
   /** 一句话（仪表盘/设置页展示） */
   description: string;
   needsTts: boolean;
@@ -38,7 +36,6 @@ export const SKILL_META: Record<Skill, SkillMeta> = {
   en2zh: {
     label: '英译中',
     short: '英→中',
-    type: 'choice',
     description: '看到英文单词，选出正确的中文释义，建立词形与词义的连接。',
     needsTts: false,
     needsAI: false,
@@ -46,7 +43,6 @@ export const SKILL_META: Record<Skill, SkillMeta> = {
   zh2en: {
     label: '中译英',
     short: '中→英',
-    type: 'choice',
     description: '看到中文释义，选出对应的英文单词，训练主动回忆。',
     needsTts: false,
     needsAI: false,
@@ -54,7 +50,6 @@ export const SKILL_META: Record<Skill, SkillMeta> = {
   spell: {
     label: '拼写',
     short: '拼写',
-    type: 'spell',
     description: '根据释义与音标拼出英文单词，强化拼写记忆。',
     needsTts: false,
     needsAI: false,
@@ -62,7 +57,6 @@ export const SKILL_META: Record<Skill, SkillMeta> = {
   listen: {
     label: '听音',
     short: '听音',
-    type: 'choice',
     description: '听到发音后选出中文释义，训练听辨与联想。',
     needsTts: true,
     needsAI: false,
@@ -70,7 +64,6 @@ export const SKILL_META: Record<Skill, SkillMeta> = {
   sentence: {
     label: '例句',
     short: '例句',
-    type: 'sentence',
     description: '在例句空格中选出正确单词，训练语境理解。',
     needsTts: false,
     needsAI: false,
@@ -78,7 +71,6 @@ export const SKILL_META: Record<Skill, SkillMeta> = {
   translate: {
     label: '互译',
     short: '互译',
-    type: 'translate',
     description: '中英互译自由作答，由 AI 判分（需配置模型）。',
     needsTts: false,
     needsAI: true,
@@ -382,7 +374,7 @@ function optionPlan(othersCount: number): { need: number; max: number } | null {
 }
 
 /* ------------------------------------------------------------------ */
-/* 例句挖空（与 fallbackExercises 同口径，独立实现避免相互依赖）          */
+/* 例句挖空（与 fallbackQuestions 同口径，独立实现避免相互依赖）          */
 /* ------------------------------------------------------------------ */
 
 /** 生成常见屈折形式，用于在例句中定位目标词（含 -s / -ed / -ing / 双写辅音 / y→ies 等）。 */
@@ -511,12 +503,12 @@ function posSuffix(target: UsableWord): string {
 /* 各技能出题                                                          */
 /* ------------------------------------------------------------------ */
 
-function buildMeaningChoiceExercise(
+function buildMeaningChoiceQuestion(
   target: UsableWord,
   skill: 'en2zh' | 'listen',
   variant: number,
   ctx: BuildContext,
-): Exercise | null {
+): Question | null {
   const answer = target.meaning;
   const plan = optionPlan(countOthers(ctx.pool, target));
   if (!plan) return null;
@@ -534,25 +526,23 @@ function buildMeaningChoiceExercise(
   }
 
   return {
-    id: uid('ex'),
+    id: uid('q'),
     wordId: target.id,
-    type: 'choice',
     prompt: clip(prompt, MAX_PROMPT),
     options,
     answer,
     explanation: clip(`${describeMeaning(target)}。${describeExample(target)}`, MAX_EXPLANATION),
     difficulty: DIFFICULTY[skill],
-    source: 'local',
     skill,
     audio: skill === 'listen' ? true : undefined,
   };
 }
 
-function buildTermChoiceExercise(
+function buildTermChoiceQuestion(
   target: UsableWord,
   variant: number,
   ctx: BuildContext,
-): Exercise | null {
+): Question | null {
   const answer = target.term;
   const plan = optionPlan(countOthers(ctx.pool, target));
   if (!plan) return null;
@@ -566,9 +556,8 @@ function buildTermChoiceExercise(
       : `「${target.meaning}」对应的英文单词是？`;
 
   return {
-    id: uid('ex'),
+    id: uid('q'),
     wordId: target.id,
-    type: 'choice',
     prompt: clip(prompt, MAX_PROMPT),
     options,
     answer,
@@ -577,16 +566,15 @@ function buildTermChoiceExercise(
       MAX_EXPLANATION,
     ),
     difficulty: DIFFICULTY.zh2en,
-    source: 'local',
     skill: 'zh2en',
   };
 }
 
-function buildSpellExercise(
+function buildSpellQuestion(
   target: UsableWord,
   variant: number,
   _ctx: BuildContext,
-): Exercise | null {
+): Question | null {
   const answer = target.term;
   const phoneticNote = target.phonetic ? `（音标 ${target.phonetic}）` : '';
   const prompt =
@@ -595,9 +583,8 @@ function buildSpellExercise(
       : `拼写练习：写出意为「${target.meaning}」的英文单词。`;
 
   return {
-    id: uid('ex'),
+    id: uid('q'),
     wordId: target.id,
-    type: 'spell',
     prompt: clip(prompt, MAX_PROMPT),
     answer,
     acceptableAnswers: collectAcceptableAnswers(answer),
@@ -606,16 +593,15 @@ function buildSpellExercise(
       MAX_EXPLANATION,
     ),
     difficulty: DIFFICULTY.spell,
-    source: 'local',
     skill: 'spell',
   };
 }
 
-function buildSentenceExercise(
+function buildSentenceQuestion(
   target: UsableWord,
   variant: number,
   ctx: BuildContext,
-): Exercise | null {
+): Question | null {
   if (!target.example) return null;
   const blank = blankOutTerm(target.example, target.term);
   if (!blank) return null;
@@ -638,9 +624,8 @@ function buildSentenceExercise(
   const translation = target.exampleTranslation ? `（${target.exampleTranslation}）` : '';
 
   return {
-    id: uid('ex'),
+    id: uid('q'),
     wordId: target.id,
-    type: 'sentence',
     prompt: clip(prompt, MAX_PROMPT),
     options,
     answer,
@@ -649,16 +634,15 @@ function buildSentenceExercise(
       MAX_EXPLANATION,
     ),
     difficulty: DIFFICULTY.sentence,
-    source: 'local',
     skill: 'sentence',
   };
 }
 
-function buildTranslateExercise(
+function buildTranslateQuestion(
   target: UsableWord,
   variant: number,
   ctx: BuildContext,
-): Exercise | null {
+): Question | null {
   if (!ctx.aiAvailable) return null;
   if (!target.example || !target.exampleTranslation) return null;
 
@@ -670,39 +654,37 @@ function buildTranslateExercise(
   const answer = direction === 'en2zh' ? target.exampleTranslation : target.example;
 
   return {
-    id: uid('ex'),
+    id: uid('q'),
     wordId: target.id,
-    type: 'translate',
     prompt: clip(prompt, MAX_PROMPT),
     answer,
     explanation: clip(`参考译文：${answer}。记忆点：${describeMeaning(target)}。`, MAX_EXPLANATION),
     difficulty: DIFFICULTY.translate,
-    source: 'local',
     skill: 'translate',
     direction,
   };
 }
 
 /** 单个技能的一套题干变体；内容不适用（如缺例句）时返回 null。 */
-function buildOneExercise(
+function buildOneQuestion(
   target: UsableWord,
   skill: Skill,
   variant: number,
   ctx: BuildContext,
-): Exercise | null {
+): Question | null {
   switch (skill) {
     case 'en2zh':
-      return buildMeaningChoiceExercise(target, 'en2zh', variant, ctx);
+      return buildMeaningChoiceQuestion(target, 'en2zh', variant, ctx);
     case 'listen':
-      return variant === 0 ? buildMeaningChoiceExercise(target, 'listen', 0, ctx) : null;
+      return variant === 0 ? buildMeaningChoiceQuestion(target, 'listen', 0, ctx) : null;
     case 'zh2en':
-      return buildTermChoiceExercise(target, variant, ctx);
+      return buildTermChoiceQuestion(target, variant, ctx);
     case 'spell':
-      return buildSpellExercise(target, variant, ctx);
+      return buildSpellQuestion(target, variant, ctx);
     case 'sentence':
-      return buildSentenceExercise(target, variant, ctx);
+      return buildSentenceQuestion(target, variant, ctx);
     case 'translate':
-      return buildTranslateExercise(target, variant, ctx);
+      return buildTranslateQuestion(target, variant, ctx);
   }
   return null;
 }
@@ -723,13 +705,13 @@ function tryBuildSkill(
   target: UsableWord,
   skill: Skill,
   ctx: BuildContext,
-): Exercise | null {
+): Question | null {
   if (!isSkillValue(skill) || !skillAllowed(skill, ctx)) return null;
   if (skill === 'translate' && ctx.translateCount >= ctx.maxTranslate) return null;
 
   const variantLimit = VARIANT_LIMIT[skill] ?? 1;
   for (let variant = 0; variant < variantLimit; variant += 1) {
-    const exercise = buildOneExercise(target, skill, variant, ctx);
+    const exercise = buildOneQuestion(target, skill, variant, ctx);
     if (!exercise) continue;
     const key = `${target.key}:${skill}:${exercise.prompt}`;
     if (ctx.usedKeys.has(key)) continue;
@@ -838,8 +820,8 @@ function buildForTargets(
   ctx: BuildContext,
   sequence: Skill[],
   count: number,
-): Exercise[] {
-  const result: Exercise[] = [];
+): Question[] {
+  const result: Question[] = [];
   if (targets.length === 0 || ctx.pool.length === 0 || sequence.length === 0) return result;
 
   let guard = 0;
@@ -905,7 +887,7 @@ function buildForTargets(
 }
 
 /** 为单个词生成 count 道题（含新词全部题型）。 */
-export function buildQuestions(word: Word, options: GenerateOptions): Exercise[] {
+export function buildQuestions(word: Word, options: GenerateOptions): Question[] {
   try {
     if (!word || typeof word !== 'object' || !options) return [];
     const count = normalizeCount(options.count);
@@ -937,7 +919,7 @@ export function buildQuestions(word: Word, options: GenerateOptions): Exercise[]
 }
 
 /** 为多个复习词生成 count 道题，尽量覆盖每个词（每词 ≥1 题）。 */
-export function buildMixedQuestions(words: Word[], options: GenerateOptions): Exercise[] {
+export function buildMixedQuestions(words: Word[], options: GenerateOptions): Question[] {
   try {
     if (!Array.isArray(words) || words.length === 0 || !options) return [];
     const count = normalizeCount(options.count);
@@ -970,10 +952,10 @@ export function buildMixedQuestions(words: Word[], options: GenerateOptions): Ex
 /* ------------------------------------------------------------------ */
 
 /** 是否为互译题（UI 据此走 LLM 判分 / 三档 verdict）。 */
-export function isTranslation(exercise: Exercise): boolean {
+export function isTranslation(question: Question): boolean {
   try {
-    if (!exercise || typeof exercise !== 'object') return false;
-    return exercise.skill === 'translate' || exercise.type === 'translate';
+    if (!question || typeof question !== 'object') return false;
+    return question.skill === 'translate';
   } catch {
     return false;
   }
@@ -992,10 +974,10 @@ function normalizeLoose(value: string): string {
  * - spell / fill：容忍大小写、首尾标点与空格，并接受 acceptableAnswers 中的变体；
  * - translate：自由作答，本地只做归一化后的等价比较（UI 以 LLM 三档判定为准）。
  */
-export function checkAnswer(exercise: Exercise, response: string): boolean {
+export function checkAnswer(question: Question, response: string): boolean {
   try {
-    if (!exercise || typeof exercise !== 'object') return false;
-    const answer = typeof exercise.answer === 'string' ? exercise.answer : '';
+    if (!question || typeof question !== 'object') return false;
+    const answer = typeof question.answer === 'string' ? question.answer : '';
     if (!answer.trim()) return false;
     const raw = typeof response === 'string' ? response : '';
     if (!raw.trim()) return false;
@@ -1005,25 +987,19 @@ export function checkAnswer(exercise: Exercise, response: string): boolean {
     const responseKey = normalizeAnswer(raw);
     if (!responseKey) return false;
 
-    switch (exercise.type) {
-      case 'spell':
-      case 'fill': {
-        if (normalizeLoose(raw) === normalizeLoose(answer)) return true;
-        const acceptable = Array.isArray(exercise.acceptableAnswers) ? exercise.acceptableAnswers : [];
-        for (const variant of acceptable) {
-          if (typeof variant !== 'string') continue;
-          if (normalizeLoose(variant) === normalizeLoose(raw)) return true;
-        }
-        return false;
+    if (question.skill === 'spell') {
+      if (normalizeLoose(raw) === normalizeLoose(answer)) return true;
+      const acceptable = Array.isArray(question.acceptableAnswers)
+        ? question.acceptableAnswers
+        : [];
+      for (const variant of acceptable) {
+        if (typeof variant !== 'string') continue;
+        if (normalizeLoose(variant) === normalizeLoose(raw)) return true;
       }
-      case 'choice':
-      case 'sentence':
-      case 'usage':
-      case 'correction':
-      case 'translate':
-      default:
-        return responseKey === answerKey;
+      return false;
     }
+
+    return responseKey === answerKey;
   } catch {
     return false;
   }

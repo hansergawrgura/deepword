@@ -9,12 +9,12 @@
 import { describe, expect, it } from 'vitest';
 import type {
   AppData,
-  Exercise,
   PracticeSessionState,
   PracticeSettings,
+  Question,
   Word,
-} from '../types';
-import { DEFAULT_PRACTICE_SETTINGS } from '../types';
+} from './types';
+import { DEFAULT_PRACTICE_SETTINGS } from './types';
 import {
   advanceQuestion,
   applyAnswer,
@@ -111,21 +111,19 @@ function context(overrides: Partial<Parameters<typeof startNewStage>[2]> = {}) {
   };
 }
 
-const SAMPLE_QUESTION: Exercise = {
+const SAMPLE_QUESTION: Question = {
   id: 'ex_1',
   wordId: 'w1',
-  type: 'choice',
   prompt: '「abandon」最接近以下哪个意思？',
   options: ['放弃；抛弃', '蜡烛'],
   answer: '放弃；抛弃',
   explanation: '解析',
   difficulty: 2,
-  source: 'local',
   skill: 'en2zh',
 };
 
 /** 会话里的题目数组（questions 是可选字段，缺省按空数组处理）。 */
-function questionsOf(session: PracticeSessionState): Exercise[] {
+function questionsOf(session: PracticeSessionState): Question[] {
   return session.questions ?? [];
 }
 
@@ -280,7 +278,6 @@ describe('applyAnswer', () => {
       questionId: 'ex_1',
       wordId: 'w1',
       skill: 'en2zh',
-      exerciseType: 'choice',
       prompt: SAMPLE_QUESTION.prompt,
       response: '蜡烛',
       answer: '放弃；抛弃',
@@ -344,11 +341,10 @@ describe('summarizeSession', () => {
   it('汇总总题数、正确数、正确率与各技能分布', () => {
     const session = createSession({ newWord: WORDS[0], reviewWords: [] });
     const inNew = startNewStage(session, WORDS[0], context());
-    const spellQuestion: Exercise = {
+    const spellQuestion: Question = {
       ...SAMPLE_QUESTION,
       id: 'ex_2',
       skill: 'spell',
-      type: 'spell',
     };
     let state = applyAnswer(inNew, SAMPLE_QUESTION, '蜡烛', { correct: false }, NOW);
     state = applyAnswer(state, spellQuestion, 'abandon', { correct: true }, NOW + 1);

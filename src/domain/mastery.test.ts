@@ -7,32 +7,20 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { AppData, Attempt, MasteryRecord, Skill } from '../types';
-import { DATA_VERSION, DEFAULT_PRACTICE_SETTINGS } from '../types';
+import type { AppData, Attempt, MasteryRecord, Skill } from './types';
+import { emptyAppData } from './fixtures';
 import { evaluateMastery, isMastered, LEGACY_ROUND_ID, MASTERY_RULES } from './mastery';
 
 const NOW = new Date('2026-11-07T12:00:00+08:00').getTime();
 const DAY = 86_400_000;
 
 function makeData(attempts: Attempt[], overrides: Partial<AppData> = {}): AppData {
-  return {
-    version: DATA_VERSION,
-    words: [],
-    providers: [],
-    activeProviderId: null,
-    practice: DEFAULT_PRACTICE_SETTINGS,
-    session: null,
-    mastery: {},
-    reviewPriority: {},
-    srs: {},
+  return emptyAppData({
     attempts,
-    mistakes: {},
-    theme: 'light',
-    stats: { daily: {} },
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
-  };
+  });
 }
 
 function makeAttempt(options: {
@@ -41,17 +29,16 @@ function makeAttempt(options: {
   createdAt: number;
   skill?: Skill;
   roundId?: string;
-  kind?: Attempt['kind'];
 }): Attempt {
-  return {
+  const attempt = {
     id: `a_${options.createdAt}_${options.correct}_${options.skill ?? 'none'}`,
     wordId: options.wordId ?? 'w1',
-    kind: options.kind ?? 'exercise',
     correct: options.correct,
-    skill: options.skill,
-    roundId: options.roundId,
     createdAt: options.createdAt,
+    ...(options.skill !== undefined ? { skill: options.skill } : {}),
+    ...(options.roundId !== undefined ? { roundId: options.roundId } : {}),
   };
+  return attempt as Attempt;
 }
 
 /** 满足全部四条规则的作答：3 次全对、2 个技能、2 个轮次、超过 14 天无错。 */
@@ -189,9 +176,9 @@ describe('evaluateMastery：四条规则', () => {
     expect(check.reasons.join('')).toContain('练习作答');
   });
 
-  it('闪卡自评与无 skill 的旧题不参与掌握判定', () => {
+  it('无 skill 的旧题不参与掌握判定', () => {
     const attempts = [
-      makeAttempt({ correct: true, createdAt: NOW - 1 * DAY, kind: 'flashcard' }),
+      makeAttempt({ correct: true, createdAt: NOW - 1 * DAY, skill: undefined }),
       makeAttempt({ correct: true, createdAt: NOW - 2 * DAY, skill: undefined }),
     ];
     const check = evaluateMastery(makeData(attempts), 'w1', NOW);
@@ -228,23 +215,6 @@ describe('isMastered', () => {
   it('认识规则标记的掌握词', () => {
     const data = makeData([], {
       mastery: { w1: { wordId: 'w1', masteredAt: NOW, source: 'rule' } as MasteryRecord },
-    });
-    expect(isMastered(data, 'w1')).toBe(true);
-  });
-
-  it('SRS 卡片状态为 mastered 也算已掌握', () => {
-    const data = makeData([], {
-      srs: {
-        w1: {
-          wordId: 'w1',
-          status: 'mastered',
-          ease: 2.5,
-          interval: 10,
-          dueAt: NOW,
-          reps: 5,
-          lapses: 0,
-        },
-      },
     });
     expect(isMastered(data, 'w1')).toBe(true);
   });

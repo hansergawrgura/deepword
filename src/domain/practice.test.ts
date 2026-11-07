@@ -7,8 +7,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Exercise, PracticeSettings, Word } from '../types';
-import { DEFAULT_PRACTICE_SETTINGS } from '../types';
+import type { PracticeSettings, Question, Word } from './types';
+import { DEFAULT_PRACTICE_SETTINGS } from './types';
 import {
   buildMixedQuestions,
   buildQuestions,
@@ -66,7 +66,7 @@ const WORDS: Word[] = [
   },
 ];
 
-function build(overrides: Partial<Parameters<typeof buildQuestions>[1]> = {}): Exercise[] {
+function build(overrides: Partial<Parameters<typeof buildQuestions>[1]> = {}): Question[] {
   return buildQuestions(WORDS[0], {
     words: WORDS,
     settings: SETTINGS,
@@ -140,10 +140,9 @@ describe('buildQuestions', () => {
     }
   });
 
-  it('题目字段满足硬性要求：来源本地、难度 1~5、题干与解析不过长', () => {
+  it('题目字段满足硬性要求：难度 1~5、题干与解析不过长', () => {
     const questions = build({ count: 8 });
     for (const question of questions) {
-      expect(question.source).toBe('local');
       expect(question.difficulty).toBeGreaterThanOrEqual(1);
       expect(question.difficulty).toBeLessThanOrEqual(5);
       expect(question.prompt.length).toBeLessThanOrEqual(500);
@@ -236,54 +235,47 @@ describe('pickSkills', () => {
 });
 
 describe('checkAnswer', () => {
-  const choice: Exercise = {
+  const choice: Question = {
     id: 'e1',
     wordId: 'w1',
-    type: 'choice',
     prompt: '「abandon」最接近以下哪个意思？',
     options: ['放弃；抛弃', '蜡烛', '港口'],
     answer: '放弃；抛弃',
     explanation: '解析',
     difficulty: 2,
-    source: 'local',
     skill: 'en2zh',
   };
 
-  const spell: Exercise = {
+  const spell: Question = {
     id: 'e2',
     wordId: 'w1',
-    type: 'spell',
     prompt: '看释义写出英文单词',
     answer: 'abandon',
     acceptableAnswers: ['abandon', 'Abandon'],
     explanation: '解析',
     difficulty: 3,
-    source: 'local',
     skill: 'spell',
   };
 
-  const fill: Exercise = {
+  const fill: Question = {
     id: 'e3',
     wordId: 'w1',
-    type: 'fill',
     prompt: 'He ____ the plan.',
     answer: 'abandoned',
     acceptableAnswers: ['abandoned', 'abandons'],
     explanation: '解析',
     difficulty: 3,
-    source: 'local',
+    skill: 'spell',
   };
 
-  const sentence: Exercise = {
+  const sentence: Question = {
     id: 'e4',
     wordId: 'w1',
-    type: 'sentence',
     prompt: 'He ____ the plan last year.',
     options: ['abandoned', 'candle'],
     answer: 'abandoned',
     explanation: '解析',
     difficulty: 3,
-    source: 'local',
     skill: 'sentence',
   };
 
@@ -317,26 +309,24 @@ describe('checkAnswer', () => {
   });
 
   it('脏数据（缺答案 / 非字符串作答 / 非法题目）判错且不抛错', () => {
-    expect(() => checkAnswer(null as unknown as Exercise, 'abandon')).not.toThrow();
-    expect(checkAnswer(null as unknown as Exercise, 'abandon')).toBe(false);
-    expect(checkAnswer({} as Exercise, 'abandon')).toBe(false);
+    expect(() => checkAnswer(null as unknown as Question, 'abandon')).not.toThrow();
+    expect(checkAnswer(null as unknown as Question, 'abandon')).toBe(false);
+    expect(checkAnswer({} as Question, 'abandon')).toBe(false);
     expect(checkAnswer(choice, undefined as unknown as string)).toBe(false);
     expect(checkAnswer(choice, 123 as unknown as string)).toBe(false);
   });
 });
 
 describe('isTranslation / skillLabel', () => {
-  it('互译题判定：skill 或 type 为 translate 都算互译', () => {
+  it('互译题判定：skill 为 translate', () => {
     expect(
       isTranslation({
         id: 'e',
         wordId: 'w1',
-        type: 'translate',
         prompt: 'p',
         answer: 'a',
         explanation: 'x',
         difficulty: 4,
-        source: 'local',
         skill: 'translate',
       }),
     ).toBe(true);
@@ -344,12 +334,10 @@ describe('isTranslation / skillLabel', () => {
       isTranslation({
         id: 'e',
         wordId: 'w1',
-        type: 'choice',
         prompt: 'p',
         answer: 'a',
         explanation: 'x',
         difficulty: 2,
-        source: 'local',
         skill: 'en2zh',
       }),
     ).toBe(false);

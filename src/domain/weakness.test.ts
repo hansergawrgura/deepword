@@ -7,8 +7,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { AppData, Attempt, MasteryRecord, Skill, Word } from '../types';
-import { DATA_VERSION, DEFAULT_PRACTICE_SETTINGS } from '../types';
+import type { AppData, Attempt, MasteryRecord, Skill, Word } from './types';
+import { emptyAppData } from './fixtures';
 import { getSkillStats, getWeaknessReport, scoreWordWeakness } from './weakness';
 
 const NOW = new Date('2026-11-07T12:00:00+08:00').getTime();
@@ -23,37 +23,23 @@ function makeAttempt(options: {
   correct: boolean;
   createdAt: number;
   skill?: Skill;
-  kind?: Attempt['kind'];
 }): Attempt {
-  return {
+  const attempt = {
     id: `a_${options.wordId}_${options.createdAt}_${options.correct}`,
     wordId: options.wordId,
-    kind: options.kind ?? 'exercise',
     correct: options.correct,
-    skill: options.skill,
     createdAt: options.createdAt,
+    ...(options.skill !== undefined ? { skill: options.skill } : {}),
   };
+  return attempt as Attempt;
 }
 
 function makeData(overrides: Partial<AppData> = {}): AppData {
-  return {
-    version: DATA_VERSION,
-    words: [],
-    providers: [],
-    activeProviderId: null,
-    practice: DEFAULT_PRACTICE_SETTINGS,
-    session: null,
-    mastery: {},
-    reviewPriority: {},
-    srs: {},
-    attempts: [],
-    mistakes: {},
-    theme: 'light',
-    stats: { daily: {} },
+  return emptyAppData({
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
-  };
+  });
 }
 
 describe('getSkillStats', () => {
@@ -89,10 +75,10 @@ describe('getSkillStats', () => {
     expect(spell?.accuracy).toBeNull();
   });
 
-  it('只统计带 skill 的练习作答：闪卡自评与旧题不计入', () => {
+  it('只统计带 skill 的练习作答：无 skill 的旧题不计入', () => {
     const data = makeData({
       attempts: [
-        makeAttempt({ wordId: 'w1', correct: true, createdAt: NOW - DAY, kind: 'flashcard' }),
+        makeAttempt({ wordId: 'w1', correct: true, createdAt: NOW - DAY }),
         makeAttempt({ wordId: 'w1', correct: true, createdAt: NOW - 2 * DAY }),
       ],
     });
@@ -222,14 +208,6 @@ describe('scoreWordWeakness', () => {
     });
     // 3 次错误 × 12 + 正确率 0% × 0.25 + 1 天未复习 × 0.5
     expect(scoreWordWeakness(data, 'w1', NOW)).toBe(61.5);
-  });
-
-  it('闪卡「不认识」标记会提高薄弱度', () => {
-    const base = makeData({ words: WORDS });
-    const marked = makeData({ words: WORDS, reviewPriority: { w1: NOW - DAY } });
-    expect(scoreWordWeakness(marked, 'w1', NOW)).toBeGreaterThan(
-      scoreWordWeakness(base, 'w1', NOW),
-    );
   });
 
   it('掌握词与无记录的词得分为 0', () => {

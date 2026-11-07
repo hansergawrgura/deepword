@@ -1,19 +1,22 @@
-/** 统计与错题分析：仪表盘、词库页从这里取数。 */
+/** 统计与错题分析（v3：无 SRS / 闪卡）。 */
 
-import type {
-  AppData,
-  Attempt,
-  DailyStat,
-  LearningStats,
-  Mistake,
-  SrsCard,
-  SrsStatus,
-  Word,
-} from '../types';
-import { createCard, isDue, masteryScore } from './srs';
+import type { AppData, Attempt, DailyStat, LearningStats, Mistake, Word } from './types';
+import { isMastered } from './mastery';
 import { dayKey, percent } from './utils';
 
 export const DAILY_GOAL = 20;
+
+export type WordLearningStatus = 'new' | 'learning' | 'review' | 'mastered';
+
+export const WORD_LEARNING_STATUS_META: Record<
+  WordLearningStatus,
+  { label: string; tone: 'muted' | 'vermilion' | 'gold' | 'sage' }
+> = {
+  new: { label: '新词', tone: 'muted' },
+  learning: { label: '学习中', tone: 'vermilion' },
+  review: { label: '复习中', tone: 'gold' },
+  mastered: { label: '已掌握', tone: 'sage' },
+};
 
 export interface Overview {
   totalWords: number;
@@ -21,31 +24,26 @@ export interface Overview {
   masteredCount: number;
   dueCount: number;
   newCount: number;
-  /** 今日完成的学习/练习次数 */
   todayReviewed: number;
   todayCorrect: number;
   todayAccuracy: number | null;
-  /** 近 7 天正确率 */
   accuracy7: number | null;
   streak: number;
   mistakeCount: number;
   unresolvedMistakes: number;
-  /** 今日目标完成度 0~100 */
   todayProgress: number;
 }
 
 export interface WordProgress {
   word: Word;
-  card: SrsCard;
   mistake?: Mistake;
   attempts: number;
-  /** 最近最多 10 次的正确率 */
   accuracy: number | null;
   wrongCount: number;
   correctStreak: number;
   lastAttemptAt?: number;
-  mastery: number;
-  due: boolean;
+  status: WordLearningStatus;
+  mastered: boolean;
 }
 
 export interface HeatmapCell {
@@ -68,7 +66,6 @@ export function getDailyStat(stats: LearningStats, ts = Date.now()): DailyStat {
   return stats.daily[dayKey(ts)] ?? emptyDaily();
 }
 
-/** 把一次学习事件写入当日统计，返回新的 stats（不修改入参）。 */
 export function recordDailyEvent(
   stats: LearningStats,
   event: { now?: number; correct: boolean; learned?: boolean; reviewedDelta?: number },
@@ -85,7 +82,6 @@ export function recordDailyEvent(
   return { ...stats, daily: { ...stats.daily, [key]: next } };
 }
 
-/** 只保留最近 N 天的每日统计，避免 localStorage 无限增长。 */
 export function pruneDaily(stats: LearningStats, keepDays = 400, now = Date.now()): LearningStats {
   const cutoff = new Date(now);
   cutoff.setHours(0, 0, 0, 0);
@@ -98,7 +94,6 @@ export function pruneDaily(stats: LearningStats, keepDays = 400, now = Date.now(
   return { ...stats, daily: kept };
 }
 
-/** 连击天数：以今天（或昨天，若今天还没学）为终点，向前数连续有学习记录的天数。 */
 export function computeStreak(daily: Record<string, DailyStat>, now = Date.now()): number {
   const cursor = new Date(now);
   cursor.setHours(0, 0, 0, 0);
@@ -130,7 +125,6 @@ export function getAccuracy(
   return percent(correct, relevant.length);
 }
 
-/** 近 N 天热力图，按时间从旧到新排列。 */
 export function getHeatmap(
   daily: Record<string, DailyStat>,
   days = 28,
@@ -152,44 +146,50 @@ export function getHeatmap(
 }
 
 export function accuracyForWord(attempts: Attempt[], wordId: string, sample = 10): number | null {
-  const relevant = attempts.filter((a) => a.wordId === wordId).slice(0, sample);
+  const relevant = attempts
+    .filter((a) => a.wordId === wordId)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, sample);
   if (relevant.length === 0) return null;
   return percent(relevant.filter((a) => a.correct).length, relevant.length);
 }
 
-/** 把整个词库映射为带学习进度的列表，供词库页 / 错题本使用。 */
-export function getWordProgressList(data: AppData, now = Date.now()): WordProgress[] {
+function wordStatus(data: AppData, wordId: string, attempts: number, mistake?: Mistake): WordLearningStatus {
+  if (isMastered(data, wordId)) return 'mastered';
+  if (attempts <= 0) return 'new';
+  if (mistake && mistake.wrongCount > 0 && mistake.correctStreak < 2) return 'learning';
+  return 'review';
+}
+
+export function getWordProgressList(data: AppData, _now = Date.now()): WordProgress[] {
   const byWord = new Map<string, Attempt[]>();
   for (const attempt of data.attempts) {
     const list = byWord.get(attempt.wordId);
     if (list) list.push(attempt);
     else byWord.set(attempt.wordId, [attempt]);
   }
+  for (const list of byWord.values()) {
+    list.sort((a, b) => b.createdAt - a.createdAt);
+  }
   return data.words.map((word) => {
-    const card = data.srs[word.id] ?? createCard(word.id, now);
     const mistake = data.mistakes[word.id];
     const attempts = byWord.get(word.id) ?? [];
-    const accuracy = accuracyForWord(attempts, word.id);
+    const accuracy = accuracyForWord(data.attempts, word.id);
+    const mastered = isMastered(data, word.id);
     return {
       word,
-      card,
       mistake,
       attempts: attempts.length,
       accuracy,
       wrongCount: mistake?.wrongCount ?? 0,
       correctStreak: mistake?.correctStreak ?? 0,
       lastAttemptAt: attempts[0]?.createdAt ?? mistake?.lastAttemptAt,
-      mastery: masteryScore(card),
-      due: card.status !== 'new' && isDue(card, now),
+      status: wordStatus(data, word.id, attempts.length, mistake),
+      mastered,
     };
   });
 }
 
-/**
- * 薄弱词排序：错误次数权重最高，其次是近期正确率、遗忘次数与到期状态。
- * 默认只返回「有过错误或明显薄弱」的词；没有错题时可通过 includeUnpracticed
- * 回退到尚未练习的词。
- */
 export function getWeakWords(
   data: AppData,
   limit = 8,
@@ -209,15 +209,13 @@ export function getWeakWords(
         }
       }
       if (item.accuracy !== null) score += Math.round((100 - item.accuracy) * 0.25);
-      score += item.card.lapses * 4;
-      if (item.due) score += 5;
-      if (item.card.status === 'mastered' && item.wrongCount === 0) score -= 20;
+      if (item.mastered && item.wrongCount === 0) score -= 20;
       return { item, score };
     })
     .filter(({ item, score }) => {
       if (score > 0) return true;
       if (!options.includeUnpracticed) return false;
-      return item.card.status === 'new' || item.attempts === 0;
+      return item.status === 'new' || item.attempts === 0;
     })
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
@@ -226,7 +224,6 @@ export function getWeakWords(
   return scored.slice(0, limit).map(({ item }) => item);
 }
 
-/** 错题本列表：有答错记录的词，按错误次数与最近出错时间排序。 */
 export function getMistakeList(data: AppData, now = Date.now()): WordProgress[] {
   return getWordProgressList(data, now)
     .filter((item) => item.mistake && item.mistake.wrongCount > 0)
@@ -239,11 +236,15 @@ export function getMistakeList(data: AppData, now = Date.now()): WordProgress[] 
     });
 }
 
-export function getMasteryBreakdown(data: AppData): Record<SrsStatus, number> {
-  const result: Record<SrsStatus, number> = { new: 0, learning: 0, review: 0, mastered: 0 };
-  for (const word of data.words) {
-    const card = data.srs[word.id];
-    result[card?.status ?? 'new'] += 1;
+export function getMasteryBreakdown(data: AppData): Record<WordLearningStatus, number> {
+  const result: Record<WordLearningStatus, number> = {
+    new: 0,
+    learning: 0,
+    review: 0,
+    mastered: 0,
+  };
+  for (const item of getWordProgressList(data)) {
+    result[item.status] += 1;
   }
   return result;
 }
@@ -256,23 +257,26 @@ export function getRecentActivity(data: AppData, limit = 6): RecentActivity[] {
     .map((attempt) => ({ attempt, word: wordMap.get(attempt.wordId) }));
 }
 
+function hasAttemptsForWord(data: AppData, wordId: string): boolean {
+  return data.attempts.some((a) => a.wordId === wordId);
+}
+
 export function getOverview(data: AppData, now = Date.now()): Overview {
-  let dueCount = 0;
   let newCount = 0;
-  let masteredCount = 0;
   let learnedWords = 0;
+  let masteredCount = 0;
+  let dueCount = 0;
+
   for (const word of data.words) {
-    const card = data.srs[word.id];
-    if (!card) {
-      newCount += 1;
+    if (isMastered(data, word.id)) {
+      masteredCount += 1;
       continue;
     }
-    if (card.status === 'new') {
-      newCount += 1;
-    } else {
+    if (hasAttemptsForWord(data, word.id)) {
       learnedWords += 1;
-      if (isDue(card, now)) dueCount += 1;
-      if (card.status === 'mastered') masteredCount += 1;
+      dueCount += 1;
+    } else {
+      newCount += 1;
     }
   }
 

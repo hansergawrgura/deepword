@@ -10,12 +10,11 @@
  *
  * 设计约束：
  * - 纯函数：不读写 localStorage、不抛错，脏数据（缺字段、空作答表）安全降级；
- * - 只统计「练习作答」（kind === 'exercise'）且带合法 skill 的记录，
- *   自评记录与早期无 skill 的历史作答不参与掌握判定；
+ * - 只统计带合法 skill 的练习作答；无 skill 的记录不参与掌握判定；
  * - `now` 可注入，便于复现与测试；缺省为 Date.now()。
  */
 
-import type { AppData, Attempt, Skill } from '../types';
+import type { AppData, Attempt, Skill } from './types';
 import { SKILLS } from './practice';
 
 /** 掌握判定规则（契约第 3 节落定的阈值）。 */
@@ -70,18 +69,14 @@ function daysBetween(from: number, to: number): number {
 }
 
 /**
- * 取某个词的「练习作答」：kind === 'exercise' 且带合法 skill。
+ * 取某个词的练习作答（带合法 skill）。
  * 按时间倒序返回（新的在前）；时间相同时保持原数组顺序（AppData 中作答本身即按新的在前存储）。
  */
 function practiceAttempts(data: AppData, wordId: string): Attempt[] {
   const attempts = Array.isArray(data?.attempts) ? (data.attempts as Attempt[]) : [];
   return attempts
     .filter(
-      (attempt) =>
-        Boolean(attempt) &&
-        attempt.wordId === wordId &&
-        attempt.kind === 'exercise' &&
-        isSkill(attempt.skill),
+      (attempt) => Boolean(attempt) && attempt.wordId === wordId && isSkill(attempt.skill),
     )
     .map((attempt) => ({
       ...attempt,
@@ -200,17 +195,8 @@ export function evaluateMastery(data: AppData, wordId: string, now?: number): Ma
   };
 }
 
-/**
- * 该词是否已掌握。
- *
- * 口径与复习候选筛选保持一致：存在掌握记录（手动 / 规则标记）或 SRS 卡片状态为 mastered 即视为已掌握。
- * 掌握记录是持久化事实，规则判定请用 evaluateMastery。
- */
+/** 该词是否已掌握（仅看 mastery 映射）。规则判定请用 evaluateMastery。 */
 export function isMastered(data: AppData, wordId: string): boolean {
   if (!data || typeof data !== 'object' || !wordId) return false;
-  if (data.mastery && data.mastery[wordId]) return true;
-  const srs = data.srs;
-  if (!srs || typeof srs !== 'object') return false;
-  const card = srs[wordId];
-  return Boolean(card) && card.status === 'mastered';
+  return Boolean(data.mastery?.[wordId]);
 }

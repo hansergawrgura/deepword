@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { AppData, Attempt, DailyStat, Mistake, Word } from '../types';
-import { DATA_VERSION, DEFAULT_PRACTICE_SETTINGS } from '../types';
-import { createCard, gradeCard } from './srs';
+import type { AppData, Attempt, DailyStat, Mistake, Word } from './types';
+import { DEFAULT_PRACTICE_SETTINGS } from './types';
+import { emptyAppData } from './fixtures';
 import { dayKey } from './utils';
-import { createInitialProviders } from './providerModel';
 import {
   accuracyForWord,
   computeStreak,
@@ -35,7 +34,7 @@ function attempt(wordId: string, correct: boolean, createdAt: number): Attempt {
   return {
     id: `a_${wordId}_${createdAt}_${correct}`,
     wordId,
-    kind: 'exercise',
+    skill: 'en2zh',
     correct,
     createdAt,
   };
@@ -43,11 +42,6 @@ function attempt(wordId: string, correct: boolean, createdAt: number): Attempt {
 
 function fixture(): AppData {
   const words = [word('w1', 'abandon'), word('w2', 'meticulous'), word('w3', 'resilient')];
-  const srs = {
-    w1: gradeCard(createCard('w1', NOW - 5 * DAY), 'again', NOW - 3 * DAY),
-    w2: gradeCard(createCard('w2', NOW - 5 * DAY), 'good', NOW - DAY),
-    w3: createCard('w3', NOW),
-  };
   const mistakes: Record<string, Mistake> = {
     w1: {
       wordId: 'w1',
@@ -56,7 +50,6 @@ function fixture(): AppData {
       firstWrongAt: NOW - 3 * DAY,
       lastWrongAt: NOW - DAY,
       lastAttemptAt: NOW - DAY,
-      lastExerciseType: 'fill',
     },
     w2: {
       wordId: 'w2',
@@ -67,10 +60,8 @@ function fixture(): AppData {
       lastAttemptAt: NOW - DAY,
     },
   };
-  return {
-    version: DATA_VERSION,
+  return emptyAppData({
     words,
-    srs,
     attempts: [
       attempt('w1', false, NOW - DAY),
       attempt('w1', false, NOW - 2 * DAY),
@@ -79,10 +70,7 @@ function fixture(): AppData {
       attempt('w2', false, NOW - 4 * DAY),
     ],
     mistakes,
-    providers: createInitialProviders(NOW),
-    activeProviderId: null,
     practice: { ...DEFAULT_PRACTICE_SETTINGS },
-    theme: 'light',
     stats: {
       daily: {
         [dayKey(NOW)]: { reviewed: 5, correct: 4, wrong: 1, learned: 2 },
@@ -90,7 +78,7 @@ function fixture(): AppData {
     },
     createdAt: NOW - 30 * DAY,
     updatedAt: NOW,
-  };
+  });
 }
 
 function dayKeyOffset(offset: number): string {

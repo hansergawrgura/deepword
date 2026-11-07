@@ -16,13 +16,13 @@
 
 import type {
   AppData,
-  Exercise,
   PracticeResult,
   PracticeSessionState,
   PracticeSettings,
+  Question,
   Skill,
   Word,
-} from '../types';
+} from './types';
 import { buildMixedQuestions, buildQuestions, checkAnswer, isTranslation } from './practice';
 import { uid } from './utils';
 
@@ -196,7 +196,7 @@ export function startReviewStage(
 /* 题目推进                                                            */
 /* ------------------------------------------------------------------ */
 
-export function currentQuestion(session: PracticeSessionState): Exercise | undefined {
+export function currentQuestion(session: PracticeSessionState): Question | undefined {
   if (!session.questions || session.questionIndex === undefined) return undefined;
   return session.questions[session.questionIndex];
 }
@@ -204,7 +204,7 @@ export function currentQuestion(session: PracticeSessionState): Exercise | undef
 /** 记录一题作答，返回更新后的会话（含讲解，便于小结回看）。 */
 export function applyAnswer(
   session: PracticeSessionState,
-  question: Exercise,
+  question: Question,
   response: string,
   result: {
     correct: boolean;
@@ -220,7 +220,6 @@ export function applyAnswer(
     questionId: question.id,
     wordId: question.wordId,
     skill: question.skill ?? 'en2zh',
-    exerciseType: question.type,
     prompt: question.prompt,
     response,
     answer: question.answer,
@@ -258,9 +257,9 @@ export function advanceQuestion(session: PracticeSessionState): PracticeSessionS
 }
 
 /** 本地判分（互译题由 LLM 判分，UI 传入 verdict 覆盖）。 */
-export function judgeExercise(exercise: Exercise, response: string): boolean {
-  if (isTranslation(exercise)) return false;
-  return checkAnswer(exercise, response);
+export function judgeQuestion(question: Question, response: string): boolean {
+  if (isTranslation(question)) return false;
+  return checkAnswer(question, response);
 }
 
 /** 本轮是否已完成全部题目（按已答数判断，与 questionIndex 解耦）。 */

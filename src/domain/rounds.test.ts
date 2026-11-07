@@ -1,30 +1,13 @@
 /**
- * 一轮选词与题量规划单测（vitest / node 环境）。
- *
- * 口径来源：docs/phase-b-contract.md 第 5 节。
- * 覆盖：countAvailable 区分新词 / 复习词 / 掌握词、pickNewWord 只挑未学未掌握的词、
- * pickReviewWords 排除掌握词与新词并按薄弱度排序、planRound 的轮次递增与新词去重。
+ * 一轮选词与题量规划单测（v3）。
  */
 
 import { describe, expect, it } from 'vitest';
-import type {
-  AppData,
-  Attempt,
-  MasteryRecord,
-  PracticeSettings,
-  SrsCard,
-  SrsStatus,
-  Word,
-} from '../types';
-import { DATA_VERSION, DEFAULT_PRACTICE_SETTINGS } from '../types';
+import type { AppData, Attempt, MasteryRecord, PracticeSettings, Skill, Word } from './types';
+import { DEFAULT_PRACTICE_SETTINGS } from './types';
+import { emptyAppData } from './fixtures';
 
-import {
-  countAvailable,
-  pickNewWord,
-  pickReviewWords,
-  planRound,
-  scoreReviewWord,
-} from './rounds';
+import { countAvailable, pickNewWord, pickReviewWords, planRound, scoreReviewWord } from './rounds';
 
 const NOW = new Date('2026-11-07T12:00:00+08:00').getTime();
 const DAY = 86_400_000;
@@ -33,30 +16,15 @@ function makeWord(id: string, term: string, meaning: string): Word {
   return { id, term, meaning, tags: [], createdAt: NOW - 30 * DAY };
 }
 
-function makeCard(wordId: string, status: SrsStatus, overrides: Partial<SrsCard> = {}): SrsCard {
-  return {
-    wordId,
-    status,
-    ease: 2.5,
-    interval: 1,
-    dueAt: NOW + DAY,
-    reps: 1,
-    lapses: 0,
-    lastReviewedAt: NOW - DAY,
-    ...overrides,
-  };
-}
-
 function makeAttempt(
   wordId: string,
   correct: boolean,
   createdAt: number,
-  skill: Attempt['skill'] = 'en2zh',
+  skill: Skill = 'en2zh',
 ): Attempt {
   return {
     id: `a_${wordId}_${createdAt}_${correct}`,
     wordId,
-    kind: 'exercise',
     correct,
     skill,
     createdAt,
@@ -64,24 +32,11 @@ function makeAttempt(
 }
 
 function makeData(overrides: Partial<AppData> = {}): AppData {
-  return {
-    version: DATA_VERSION,
-    words: [],
-    providers: [],
-    activeProviderId: null,
-    practice: DEFAULT_PRACTICE_SETTINGS,
-    session: null,
-    mastery: {},
-    reviewPriority: {},
-    srs: {},
-    attempts: [],
-    mistakes: {},
-    theme: 'light',
-    stats: { daily: {} },
+  return emptyAppData({
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
-  };
+  });
 }
 
 const WORDS = [
@@ -95,32 +50,13 @@ describe('countAvailable', () => {
   it('区分新词、复习词与掌握词', () => {
     const data = makeData({
       words: WORDS,
-      srs: {
-        w1: makeCard('w1', 'new', { reps: 0, lastReviewedAt: undefined }),
-        w2: makeCard('w2', 'review'),
-        w3: makeCard('w3', 'review'),
-        w4: makeCard('w4', 'new', { reps: 0, lastReviewedAt: undefined }),
-      },
+      attempts: [makeAttempt('w2', true, NOW - DAY)],
       mastery: { w3: { wordId: 'w3', masteredAt: NOW, source: 'rule' } as MasteryRecord },
     });
-    // w1 / w4 是新词，w2 是复习词，w3 被掌握记录标记。
     expect(countAvailable(data, NOW)).toEqual({ newWords: 2, reviewWords: 1, mastered: 1 });
   });
 
-  it('SRS 卡片状态为 mastered 的词计入掌握词', () => {
-    const data = makeData({
-      words: WORDS,
-      srs: {
-        w1: makeCard('w1', 'new', { reps: 0, lastReviewedAt: undefined }),
-        w2: makeCard('w2', 'mastered'),
-        w3: makeCard('w3', 'new', { reps: 0, lastReviewedAt: undefined }),
-        w4: makeCard('w4', 'new', { reps: 0, lastReviewedAt: undefined }),
-      },
-    });
-    expect(countAvailable(data, NOW)).toEqual({ newWords: 3, reviewWords: 0, mastered: 1 });
-  });
-
-  it('脏数据（空词库 / 缺卡片）不抛错', () => {
+  it('脏数据（空词库）不抛错', () => {
     expect(countAvailable(makeData(), NOW)).toEqual({
       newWords: 0,
       reviewWords: 0,
@@ -135,13 +71,11 @@ describe('countAvailable', () => {
 });
 
 describe('pickNewWord', () => {
-  it('只挑未学过且未掌握的词', () => {
+  it('只挑无作答且未掌握的词', () => {
     const data = makeData({
       words: WORDS,
-      srs: {
-        w2: makeCard('w2', 'review'),
-        w3: makeCard('w3', 'mastered'),
-      },
+      attempts: [makeAttempt('w2', true, NOW - DAY)],
+      mastery: { w3: { wordId: 'w3', masteredAt: NOW, source: 'rule' } as MasteryRecord },
     });
     const picked = pickNewWord(data, NOW);
     expect(picked).not.toBeNull();
@@ -151,12 +85,7 @@ describe('pickNewWord', () => {
   it('没有可用新词时返回 null', () => {
     const data = makeData({
       words: WORDS,
-      srs: {
-        w1: makeCard('w1', 'review'),
-        w2: makeCard('w2', 'review'),
-        w3: makeCard('w3', 'review'),
-        w4: makeCard('w4', 'review'),
-      },
+      attempts: WORDS.map((word, index) => makeAttempt(word.id, true, NOW - index * DAY)),
     });
     expect(pickNewWord(data, NOW)).toBeNull();
   });
@@ -171,15 +100,14 @@ describe('pickNewWord', () => {
 });
 
 describe('pickReviewWords', () => {
-  it('排除掌握词与新词，只留已学未掌握的词', () => {
+  it('排除掌握词与新词，只留有作答未掌握的词', () => {
     const data = makeData({
       words: WORDS,
-      srs: {
-        w1: makeCard('w1', 'new', { reps: 0, lastReviewedAt: undefined }),
-        w2: makeCard('w2', 'review'),
-        w3: makeCard('w3', 'review'),
-        w4: makeCard('w4', 'review'),
-      },
+      attempts: [
+        makeAttempt('w2', true, NOW - DAY),
+        makeAttempt('w3', true, NOW - DAY),
+        makeAttempt('w4', true, NOW - DAY),
+      ],
       mastery: { w4: { wordId: 'w4', masteredAt: NOW, source: 'rule' } as MasteryRecord },
     });
     const picked = pickReviewWords(data, 10, { now: NOW });
@@ -192,7 +120,6 @@ describe('pickReviewWords', () => {
   it('按薄弱度排序：错得多的词排前面', () => {
     const data = makeData({
       words: WORDS,
-      srs: { w2: makeCard('w2', 'review'), w3: makeCard('w3', 'review') },
       attempts: [
         makeAttempt('w2', false, NOW - DAY),
         makeAttempt('w2', false, NOW - DAY),
@@ -206,24 +133,14 @@ describe('pickReviewWords', () => {
     expect(picked.map((word) => word.id)).toEqual(['w2', 'w3']);
   });
 
-  it('闪卡「不认识」标记的词排在最前', () => {
-    const data = makeData({
-      words: WORDS,
-      srs: { w2: makeCard('w2', 'review'), w3: makeCard('w3', 'review') },
-      reviewPriority: { w3: NOW - 2 * DAY },
-    });
-    const picked = pickReviewWords(data, 10, { now: NOW });
-    expect(picked[0]?.id).toBe('w3');
-  });
-
   it('受 limit 限制，limit ≤ 0 返回空数组', () => {
     const data = makeData({
       words: WORDS,
-      srs: {
-        w2: makeCard('w2', 'review'),
-        w3: makeCard('w3', 'review'),
-        w4: makeCard('w4', 'review'),
-      },
+      attempts: [
+        makeAttempt('w2', true, NOW - DAY),
+        makeAttempt('w3', true, NOW - DAY),
+        makeAttempt('w4', true, NOW - DAY),
+      ],
     });
     expect(pickReviewWords(data, 2, { now: NOW })).toHaveLength(2);
     expect(pickReviewWords(data, 0, { now: NOW })).toEqual([]);
@@ -233,7 +150,7 @@ describe('pickReviewWords', () => {
   it('excludeWordIds 里的词被排除', () => {
     const data = makeData({
       words: WORDS,
-      srs: { w2: makeCard('w2', 'review'), w3: makeCard('w3', 'review') },
+      attempts: [makeAttempt('w2', true, NOW - DAY), makeAttempt('w3', true, NOW - DAY)],
     });
     const picked = pickReviewWords(data, 10, { now: NOW, excludeWordIds: ['w2'] });
     expect(picked.map((word) => word.id)).toEqual(['w3']);
@@ -247,15 +164,11 @@ describe('planRound', () => {
   });
 
   it('轮次号在上一轮基础上 +1，没有会话时为 1', () => {
-    const data = makeData({
-      words: WORDS,
-      srs: { w1: makeCard('w1', 'new', { reps: 0, lastReviewedAt: undefined }) },
-    });
+    const data = makeData({ words: WORDS });
     expect(planRound(data, settings(), { now: NOW }).roundNo).toBe(1);
 
     const withSession = makeData({
       words: WORDS,
-      srs: { w1: makeCard('w1', 'new', { reps: 0, lastReviewedAt: undefined }) },
       session: {
         id: 'round_x',
         startedAt: NOW,
@@ -274,12 +187,11 @@ describe('planRound', () => {
   it('本轮新词不会同时出现在复习列表里', () => {
     const data = makeData({
       words: WORDS,
-      srs: {
-        w1: makeCard('w1', 'new', { reps: 0, lastReviewedAt: undefined }),
-        w2: makeCard('w2', 'review'),
-        w3: makeCard('w3', 'review'),
-        w4: makeCard('w4', 'review'),
-      },
+      attempts: [
+        makeAttempt('w2', true, NOW - DAY),
+        makeAttempt('w3', true, NOW - DAY),
+        makeAttempt('w4', true, NOW - DAY),
+      ],
     });
     const plan = planRound(data, settings(), { now: NOW });
     expect(plan.newWord).not.toBeNull();
@@ -289,30 +201,20 @@ describe('planRound', () => {
   it('复习词数被夹在 4~6，不足时按实际数量', () => {
     const data = makeData({
       words: WORDS,
-      srs: {
-        w1: makeCard('w1', 'new', { reps: 0, lastReviewedAt: undefined }),
-        w2: makeCard('w2', 'review'),
-        w3: makeCard('w3', 'review'),
-      },
+      attempts: [makeAttempt('w2', true, NOW - DAY), makeAttempt('w3', true, NOW - DAY)],
     });
-    // 只有 2 个可复习词 → 按实际数量返回。
-    expect(
-      planRound(data, settings({ reviewWordsPerRound: 6 }), { now: NOW }).reviewWords,
-    ).toHaveLength(2);
-    // 设置 2 被夹到下限 4，候选不足时仍按实际数量。
-    expect(
-      planRound(data, settings({ reviewWordsPerRound: 2 }), { now: NOW }).reviewWords,
-    ).toHaveLength(2);
+    expect(planRound(data, settings({ reviewWordsPerRound: 6 }), { now: NOW }).reviewWords).toHaveLength(
+      2,
+    );
+    expect(planRound(data, settings({ reviewWordsPerRound: 2 }), { now: NOW }).reviewWords).toHaveLength(
+      2,
+    );
   });
 
   it('excludeWordIds 会同时排除新词与复习词', () => {
     const data = makeData({
       words: WORDS,
-      srs: {
-        w1: makeCard('w1', 'new', { reps: 0, lastReviewedAt: undefined }),
-        w2: makeCard('w2', 'review'),
-        w3: makeCard('w3', 'review'),
-      },
+      attempts: [makeAttempt('w2', true, NOW - DAY), makeAttempt('w3', true, NOW - DAY)],
     });
     const plan = planRound(data, settings(), { now: NOW, excludeWordIds: ['w1', 'w2'] });
     expect(plan.newWord?.id).not.toBe('w1');
@@ -331,7 +233,6 @@ describe('scoreReviewWord', () => {
   it('错得多的词分数更高', () => {
     const data = makeData({
       words: WORDS,
-      srs: { w2: makeCard('w2', 'review'), w3: makeCard('w3', 'review') },
       attempts: [
         makeAttempt('w2', false, NOW - DAY),
         makeAttempt('w2', false, NOW - DAY),

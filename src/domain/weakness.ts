@@ -2,16 +2,16 @@
  * Phase B 薄弱分析（6 个技能维度 + 最弱词）。
  *
  * 契约来源：docs/phase-b-contract.md 第 4 节。全部数据从作答记录现算，不落库：
- * - 只统计 `kind === 'exercise'` 且带 `skill` 的作答（互译用 `correct` 判定）；
+ * - 只统计带 `skill` 的练习作答（互译用 `correct` 判定）；
  * - `skills` 固定 6 项，顺序同 practice.ts 的 SKILLS；
  * - `accuracy` 为 0~100 的整数，无作答时为 null；
- * - 薄弱度 = 错误次数 × 高权重 + 近期正确率低 + 最近作答久未复习 + 闪卡「不认识」标记加权；
+ * - 薄弱度 = 错误次数 × 高权重 + 近期正确率低 + 最近作答久未复习；
  * - 掌握词不参与薄弱排名（它们不再需要复习）。
  *
  * 设计约束：纯函数、不读写 localStorage、不抛错；脏数据（缺 skill / 字段缺失 / 空词库）安全降级。
  */
 
-import type { AppData, Attempt, Skill, Word } from '../types';
+import type { AppData, Attempt, Skill, Word } from './types';
 import { SKILLS, SKILL_META } from './practice';
 import { percent } from './utils';
 
@@ -58,8 +58,6 @@ const ACCURACY_WEIGHT = 0.25;
 const RECENCY_WEIGHT = 0.5;
 /** 最近作答久远的天数上限，避免久到爆表。 */
 const RECENCY_CAP_DAYS = 30;
-/** 闪卡「不认识」标记（data.reviewPriority）的额外加权。 */
-const PRIORITY_BONUS = 20;
 /** 计算「近期正确率」时取最近多少次作答。 */
 const RECENT_SAMPLE = 10;
 /** 最弱词默认条数上限。 */
@@ -89,9 +87,9 @@ function isSkill(value: unknown): value is Skill {
   return typeof value === 'string' && (SKILLS as readonly string[]).includes(value);
 }
 
-/** 是否为参与统计的练习作答（带 skill 的练习题）。 */
+/** 是否为参与统计的练习作答（带 skill）。 */
 function isPracticeAttempt(attempt: Attempt | null | undefined): boolean {
-  return Boolean(attempt) && attempt!.kind === 'exercise' && isSkill(attempt!.skill);
+  return Boolean(attempt) && isSkill(attempt!.skill);
 }
 
 /** 取全部练习作答（带 skill），按时间倒序。 */
@@ -109,21 +107,9 @@ function practiceAttempts(data: AppData): Attempt[] {
     .sort((a, b) => b.createdAt - a.createdAt);
 }
 
-/** 某个词是否已掌握（掌握记录或 SRS 卡片 mastered）。 */
+/** 某个词是否已掌握。 */
 function isMasteredWord(data: AppData, wordId: string): boolean {
-  if (data?.mastery && data.mastery[wordId]) return true;
-  const srs = data?.srs;
-  if (!srs || typeof srs !== 'object') return false;
-  const card = srs[wordId];
-  return Boolean(card) && card.status === 'mastered';
-}
-
-/** 某个词是否在闪卡里被标记为「不认识」（需要优先复习）。 */
-function hasReviewPriority(data: AppData, wordId: string): boolean {
-  const priority = data?.reviewPriority;
-  if (!priority || typeof priority !== 'object') return false;
-  const value = priority[wordId];
-  return typeof value === 'number' && Number.isFinite(value);
+  return Boolean(data?.mastery?.[wordId]);
 }
 
 /** 取某个词的练习作答（时间倒序）。 */
@@ -196,7 +182,7 @@ export function getWeaknessReport(
 /**
  * 单词薄弱度，分越高越该复习（用于复习选词排序）。
  *
- * 构成：错误次数 × 高权重 + 近期正确率低 + 最近作答久远 + 闪卡「不认识」标记加权。
+ * 构成：错误次数 × 高权重 + 近期正确率低 + 最近作答久远。
  * 掌握词返回 0（不再需要复习）。
  */
 export function scoreWordWeakness(data: AppData, wordId: string, now?: number): number {
@@ -205,11 +191,9 @@ export function scoreWordWeakness(data: AppData, wordId: string, now?: number): 
   if (isMasteredWord(data, wordId)) return 0;
 
   const attempts = wordAttempts(data, wordId);
-  const priority = hasReviewPriority(data, wordId);
 
   if (attempts.length === 0) {
-    // 还没做过练习题：只有闪卡「不认识」标记时也给一点权重。
-    return priority ? PRIORITY_BONUS : 0;
+    return 0;
   }
 
   const wrongCount = attempts.filter((attempt) => !attempt.correct).length;
@@ -225,8 +209,6 @@ export function scoreWordWeakness(data: AppData, wordId: string, now?: number): 
     const days = Math.min(RECENCY_CAP_DAYS, Math.max(0, (nowTs - lastAt) / DAY_MS));
     score += days * RECENCY_WEIGHT;
   }
-
-  if (priority) score += PRIORITY_BONUS;
 
   return Math.round(score * 100) / 100;
 }
