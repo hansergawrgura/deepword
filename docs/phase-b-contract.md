@@ -335,6 +335,18 @@ export function encouragement(seed?: number): string;  // 本地鼓励语（可�
 - 第 1 题反馈附词条信息：由 UI 在 `session.stage==='new' && session.questionIndex===0` 时渲染
   `word.term / phonetic / partOfSpeech / meaning / example / exampleTranslation / tags`。
 - 答错：调用 `streamAnswerFeedback`；答对：`encouragement` + `feedbackAutoAdvanceMs` 自动下一题。
+- **作答阶段 `AnswerPhase`**（`components/study/types.ts`）：`idle` 未答 / `judging` 判分中 /
+  `retry` 答错但**不锁题** / `answered` 已答对。`isAnswering(phase)` 是「还能不能继续作答」的**唯一**判断，
+  **不要**再另加需要外部解锁的「提交锁」：第二次答错时 `phase` 前后都是 `retry`（`judging` 被批处理吞掉），
+  靠「phase 变化才解锁」的标志位会永远解不开，题目就此点不动。长按按键的 `event.repeat` 在 keydown 里挡掉。
+  答错后输入框与选项立即可继续操作（AI 讲解仍在流式输出也不挡），可一直答到对为止；
+  答错时右栏给「跳过这题」，答对后才是「下一题」。
+- **选择题选项状态**（`components/study/optionState.ts`）：`idle` / `selected` / `correct` / `wrong`，
+  由 `resolveOptionStates` 统一算出，组件只做样式映射。规则：任何一次新作答都会清掉上一轮的强调，
+  界面永远只强调「刚选的那一项」（答错不提前标出正解）。动效 / 声效订阅 `emitOptionFeedback`
+  （`pick` 与 `verdict` 两个时机），DOM 上同步输出 `data-option-state`。
+- **同一道题只记录第一次作答**：答错后的重试不再 `applyAnswer` / `recordExercise`，
+  否则会虚高正确率并让 `isRoundComplete` 提前判定整轮答完。
 - 互译：`streamTranslationGrade`；`poor` 时「下一题」按钮在流式结束且用户点「我看完了」后才可用。
 - 每次判分：`actions.recordExercise({... skill, latencyMs, verdict, roundId, aiFeedback, aiImprovement, aiStatus })`
   并 `actions.setPracticeSession(...)` 写回本轮状态；规则满足时 reducer 自动标记掌握。

@@ -1566,6 +1566,10 @@
   font-size: 12.5px;
 }
 
+.practice-card__hint--retry {
+  color: var(--vermilion-deep);
+}
+
 .practice-card__actions {
   margin-top: 18px;
   display: flex;
@@ -1652,6 +1656,14 @@
 .practice-option.is-wrong .practice-option__key {
   border-color: var(--vermilion);
   color: var(--vermilion-deep);
+}
+
+/* 选项状态由 data-option-state 统一输出（idle / selected / correct / wrong）。
+   上面三条类名是它的样式映射；要加动效直接按属性写选择器即可，
+   不需要在组件里判断「第几次作答」。 */
+
+.practice-option:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 /* 输入 */

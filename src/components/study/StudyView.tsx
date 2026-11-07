@@ -111,6 +111,8 @@ export default function StudyView({ navigate }: ViewProps) {
   const pendingRecord = useRef<PendingRecord | null>(null);
   /** 最近一次作答内容，供「让 AI 讲讲」重放。 */
   const lastResponse = useRef('');
+  /** 作答序号：晚到的流式讲解不能覆盖新一轮作答的反馈。 */
+  const attemptSeq = useRef(0);
 
   const now = new Date();
   const nowTs = now.getTime();
@@ -226,13 +228,15 @@ export default function StudyView({ navigate }: ViewProps) {
     });
   }, [actions]);
 
-  /** 把后到的讲解补写进本轮最后一条作答结果（小结可回看）。 */
-  const patchLastResult = useCallback(
-    (patch: Partial<PracticeResult>) => {
+  /** 把后到的讲解补写进本轮对应题目的作答结果（小结可回看）。 */
+  const patchResult = useCallback(
+    (questionId: string, patch: Partial<PracticeResult>) => {
       const current = sessionRef.current;
       if (!current?.results?.length) return;
+      const index = current.results.findIndex((result) => result.questionId === questionId);
+      if (index < 0) return;
       const results = current.results.slice();
-      results[results.length - 1] = { ...results[results.length - 1], ...patch };
+      results[index] = { ...results[index], ...patch };
       const next = { ...current, results };
       sessionRef.current = next;
       actions.setPracticeSession(next);
@@ -367,6 +371,15 @@ export default function StudyView({ navigate }: ViewProps) {
       if (!word) return;
 
       const latencyMs = Math.max(0, Date.now() - questionStartedAt.current);
+      /**
+       * 同一道题只落第一次作答的结果：答错后的重试是学习过程，
+       * 不再追加结果（否则会虚高正确率，并让整轮被提前判定答完）。
+       */
+      const firstAttempt = !(current.results ?? []).some(
+        (result) => result.questionId === item.id,
+      );
+      const seq = ++attemptSeq.current;
+
       setPhase('judging');
       setFeedback(null);
       lastResponse.current = response;
@@ -378,6 +391,36 @@ export default function StudyView({ navigate }: ViewProps) {
       let aiStatus: AnswerFeedbackState['status'] | undefined;
       /** 讲解是否已经定稿（定稿即可落库）。 */
       let settled = false;
+      /** 这次作答结束后停在哪个阶段：答错 → retry（不锁题）。 */
+      let nextPhase: AnswerPhase = 'answered';
+
+      /** 落库 + 写入本轮结果；只有首次作答才真正写。 */
+      const commit = (result: {
+        correct: boolean;
+        verdict?: AnswerFeedbackState['verdict'];
+        aiFeedback?: string;
+        aiImprovement?: string;
+        aiStatus?: AnswerFeedbackState['status'];
+      }) => {
+        if (!firstAttempt) return;
+        pendingRecord.current = {
+          wordId: word.id,
+          correct: result.correct,
+          exerciseType: item.type,
+          prompt: item.prompt,
+          skill: item.skill,
+          latencyMs,
+          verdict: result.verdict,
+          aiFeedback: result.aiFeedback,
+          aiImprovement: result.aiImprovement,
+          aiStatus: result.aiStatus,
+          roundId: current.id,
+        };
+        const next = applyAnswer(current, item, response, { ...result, latencyMs }, Date.now());
+        // 先同步 ref：用户可能立刻点「下一题」，不能读到还没落地的旧会话。
+        sessionRef.current = next;
+        actions.setPracticeSession(next);
+      };
 
       if (isTranslation(item) && llmSettings && aiAvailable) {
         const grade = await streamTranslationGrade(
@@ -408,17 +451,24 @@ export default function StudyView({ navigate }: ViewProps) {
           verdict: grade.verdict,
           streaming: false,
         });
+        commit({ correct, verdict, aiFeedback, aiImprovement, aiStatus });
       } else {
         // 本地判分（choice / spell / listen / sentence）。
         correct = judgeExercise(item, response);
         if (correct) {
           settled = true;
+          commit({ correct: true });
           setFeedback({
             status: 'ok',
             text: encouragement(current.answered),
             streaming: false,
           });
         } else {
+          // 答错：先把题解锁，用户可以在讲解流式输出的同时继续作答。
+          nextPhase = 'retry';
+          commit({ correct: false });
+          setPhase('retry');
+
           const local = localAnswerFeedback({ word, exercise: item, response });
           if (data.practice.autoExplain && llmSettings && aiAvailable) {
             // 自动讲解：答错立刻流式生成错因 / 记忆点 / 改进，不自动跳题。
@@ -426,14 +476,18 @@ export default function StudyView({ navigate }: ViewProps) {
               { word, exercise: item, response },
               llmSettings,
               {
-                onToken: (chunk) =>
+                onToken: (chunk) => {
+                  // 已经被更新的作答取代：晚到的 token 不再改界面。
+                  if (attemptSeq.current !== seq) return;
                   setFeedback((prev) => ({
                     status: 'ok',
                     text: prev?.text ? `${prev.text}${chunk}` : chunk,
                     streaming: true,
-                  })),
+                  }));
+                },
               },
             );
+            if (attemptSeq.current !== seq) return;
             aiFeedback = streamed.explanation;
             aiImprovement = streamed.improvement;
             aiStatus = streamed.status;
@@ -457,44 +511,16 @@ export default function StudyView({ navigate }: ViewProps) {
               streaming: false,
             });
           }
+
+          // 给已在界面上的本轮结果补上讲解（小结可回看）。
+          if (firstAttempt) patchResult(item.id, { aiFeedback, aiImprovement, aiStatus });
         }
       }
 
-      pendingRecord.current = {
-        wordId: word.id,
-        correct,
-        exerciseType: item.type,
-        prompt: item.prompt,
-        skill: item.skill,
-        latencyMs,
-        verdict,
-        aiFeedback,
-        aiImprovement,
-        aiStatus,
-        roundId: current.id,
-      };
       setNeedsExplain(!settled && !correct);
+      setPhase(nextPhase);
 
-      const next = applyAnswer(
-        current,
-        item,
-        response,
-        {
-          correct,
-          verdict,
-          aiFeedback,
-          aiImprovement,
-          aiStatus,
-          latencyMs,
-        },
-        Date.now(),
-      );
-      // 先同步 ref：用户可能立刻点「下一题」，不能读到 reducer 还没落地的旧会话。
-      sessionRef.current = next;
-      actions.setPracticeSession(next);
-      setPhase('answered');
-
-      // 讲解已定稿 → 立刻落库；否则等「让 AI 讲讲」补齐或用户点「继续」时再落。
+      // 讲解定稿 → 落库；未定稿的等「让 AI 讲讲」补齐或离开本题时落。
       if (settled) flushRecord();
 
       // 答对：本地鼓励语 + 按设置自动下一题（0 = 手动）。
@@ -517,6 +543,7 @@ export default function StudyView({ navigate }: ViewProps) {
       data.practice.feedbackAutoAdvanceMs,
       flushRecord,
       llmSettings,
+      patchResult,
       wordMap,
     ],
   );
@@ -558,7 +585,7 @@ export default function StudyView({ navigate }: ViewProps) {
       pendingRecord.current.aiImprovement = streamed.improvement;
       pendingRecord.current.aiStatus = streamed.status;
     }
-    patchLastResult({
+    patchResult(item.id, {
       aiFeedback: streamed.explanation,
       aiImprovement: streamed.improvement,
       aiStatus: streamed.status,
@@ -572,7 +599,7 @@ export default function StudyView({ navigate }: ViewProps) {
     });
     setNeedsExplain(false);
     setExplaining(false);
-  }, [aiAvailable, feedback?.verdict, llmSettings, patchLastResult, wordMap]);
+  }, [aiAvailable, feedback?.verdict, llmSettings, patchResult, wordMap]);
 
   const handleNext = useCallback(() => {
     clearAdvanceTimer();
