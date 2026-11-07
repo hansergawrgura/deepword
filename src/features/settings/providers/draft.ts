@@ -1,13 +1,13 @@
 /** Provider 设置用的本地草稿工具：profile ⇄ draft ⇄ LLMSettings。 */
 
-import { toLLMSettings } from '../../lib/providerModel';
+import { toLLMSettings } from '@/infra/llm/providerModel';
 import type {
   LLMSettings,
   ProviderDraft,
   ProviderKind,
   ProviderProfile,
   ThinkingMode,
-} from '../../types';
+} from '@/domain/types';
 
 export const PROTOCOL_OPTIONS: ReadonlyArray<{
   value: ProviderKind;

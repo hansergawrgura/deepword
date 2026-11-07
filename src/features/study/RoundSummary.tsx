@@ -4,12 +4,12 @@
  * 只负责展示；「继续下一轮」由 StudyView 决定下一轮的选词与题量。
  */
 
-import type { PracticeSessionState, Skill, Word } from '@/types';
-import { SKILL_META } from '@/lib/practice';
-import type { MasteryCheck } from '@/lib/mastery';
-import type { WeakWordStat } from '@/lib/weakness';
-import { percent, truncate } from '@/lib/utils';
-import { IconRefresh } from '../ui/icons';
+import type { PracticeSessionState, Skill, Word } from '@/domain/types';
+import { SKILL_META } from '@/domain/practice';
+import type { MasteryCheck } from '@/domain/mastery';
+import type { WeakWordStat } from '@/domain/weakness';
+import { percent, truncate } from '@/domain/utils';
+import { IconRefresh } from '@/ui/icons';
 
 /** 本轮某个新词的掌握判定进度。 */
 export interface MasteryProgressRow {

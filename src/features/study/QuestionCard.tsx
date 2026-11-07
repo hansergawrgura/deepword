@@ -26,10 +26,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Exercise, Word } from '@/types';
-import { SKILL_META, isTranslation } from '@/lib/practice';
-import { cx } from '@/lib/utils';
-import { IconVolume } from '../ui/icons';
+import type { Question, Word } from '@/domain/types';
+import { SKILL_META, isTranslation } from '@/domain/practice';
+import { cx } from '@/domain/utils';
+import { IconVolume } from '@/ui/icons';
 import {
   emitOptionFeedback,
   optionStateClass,
@@ -39,7 +39,7 @@ import {
 import { isAnswering, type AnswerFeedbackState, type AnswerPhase } from './types';
 
 export interface QuestionCardProps {
-  question: Exercise;
+  question: Question;
   word: Word;
   /** 第几题 / 共几题。 */
   index: number;
@@ -104,8 +104,8 @@ export default function QuestionCard({
   // 可作答时把焦点交给输入框（拼写与互译）；答错回到输入框，方便接着改。
   useEffect(() => {
     if (!editable || translation) return;
-    if (question.type === 'spell') inputRef.current?.focus();
-  }, [editable, question.id, question.type, translation]);
+    if (question.skill === 'spell') inputRef.current?.focus();
+  }, [editable, question.id, question.skill, translation]);
 
   // 窄屏下反馈排在题目卡下方，出现时滚到可见位置（只依赖「有无反馈」，
   // 避免流式讲解每来一个 token 就重新滚动）。
@@ -282,7 +282,7 @@ export default function QuestionCard({
               );
             })}
           </ul>
-        ) : question.type === 'spell' ? (
+        ) : question.skill === 'spell' ? (
           <div className="practice-input">
             <label className="label" htmlFor="practice-spell">
               写出这个单词
@@ -363,7 +363,7 @@ export default function QuestionCard({
               ? '点选项直接作答，也可以按 A / B / C / D 选择。'
               : translation
                 ? '译文由 AI 判分：三档 perfect / good / poor。'
-                : question.type === 'spell'
+                : question.skill === 'spell'
                   ? '拼写不计大小写，但要注意词形变化。'
                   : '写完按 Cmd / Ctrl + Enter 提交。'}
           </p>

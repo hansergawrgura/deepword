@@ -1,32 +1,31 @@
-/**
- * 学习页的词笺 —— 一张「卡片」。
- *
- * 两种用法：
- * - `variant="card"`（默认）：完整的 SRS 词笺，正面给单词 + 音标 + 词性 + 排期；
- * - `variant="gate"`：新词闸门专用 —— **正面只给单词（可发音）**，
- *   音标 / 词性 / 释义 / 例句 / 标签全部放到背面，翻面才给答案。
- *
- * 卡片是纯粹的表现层：翻面/发音都由 StudyView 驱动，这里不读写任何数据。
- */
+import type { Word } from '@/domain/types';
+import { cx } from '@/domain/utils';
+import { IconVolume } from '@/ui/icons';
 
-import type { SrsCard, Word } from '@/types';
-import { SRS_STATUS_META, masteryScore } from '@/lib/srs';
-import { cx, relativeDue } from '@/lib/utils';
-import { IconVolume } from '../ui/icons';
+export interface FlashcardSchedule {
+  status: 'new' | 'learning' | 'review' | 'relearning';
+  dueAt: number;
+  interval: number;
+}
 
 export interface FlashcardProps {
   word: Word;
-  card: SrsCard;
+  card: FlashcardSchedule;
   isNew: boolean;
   isDue: boolean;
   flipped: boolean;
-  /** 在正面误按 1–4 时递增，用来轻点一下「翻面」提示。 */
   nudge: number;
-  /** 'gate' = 闸门（正面只给单词）；'card' = 完整词笺。 */
   variant?: 'card' | 'gate';
   onFlip: () => void;
   onSpeak: () => void;
 }
+
+const STATUS_META = {
+  new: { label: '新词', tone: 'vermilion' as const },
+  learning: { label: '学习中', tone: 'gold' as const },
+  review: { label: '复习', tone: 'sage' as const },
+  relearning: { label: '重学', tone: 'vermilion' as const },
+} as const;
 
 const STATUS_TONE_CLASS: Record<'muted' | 'vermilion' | 'gold' | 'sage', string> = {
   muted: 'badge--outline',
@@ -41,6 +40,28 @@ function wordSizeClass(term: string): string {
   return '';
 }
 
+function dueLabel(card: FlashcardSchedule, now = Date.now()): string {
+  if (card.status === 'new') return '首次学习';
+  const delta = card.dueAt - now;
+  if (delta <= 0) return '已到期';
+  const days = Math.ceil(delta / 86_400_000);
+  if (days <= 1) return '今天';
+  return `${days} 天后`;
+}
+
+function masteryScore(card: FlashcardSchedule): number {
+  if (card.status === 'new') return 0;
+  if (card.status === 'learning') return 35;
+  if (card.status === 'relearning') return 20;
+  return Math.min(100, 50 + Math.round(card.interval * 8));
+}
+
+export const DEFAULT_GATE_SCHEDULE: FlashcardSchedule = {
+  status: 'new',
+  dueAt: Date.now(),
+  interval: 0,
+};
+
 export default function Flashcard({
   word,
   card,
@@ -48,22 +69,20 @@ export default function Flashcard({
   isDue,
   flipped,
   nudge,
-  variant = 'card',
+  variant = 'gate',
   onFlip,
   onSpeak,
 }: FlashcardProps) {
-  const status = isNew ? SRS_STATUS_META.new : SRS_STATUS_META[card.status];
+  const status = isNew ? STATUS_META.new : STATUS_META[card.status];
   const seal = isNew ? '新' : '复';
   const mastery = masteryScore(card);
   const intervalText = card.interval > 0 ? `${card.interval} 天` : '尚未排期';
-  const dueText = card.status === 'new' ? '首次学习' : relativeDue(card.dueAt);
-  /** 闸门模式：正面只给单词，其余信息留到背面。 */
+  const dueText = dueLabel(card);
   const gate = variant === 'gate';
 
   return (
     <div className="study-card-stage">
       <div className={cx('study-card', flipped && 'is-flipped')}>
-        {/* ------------------------------ 正面 ------------------------------ */}
         <article
           className="study-card__face study-card__face--front"
           inert={flipped}
@@ -139,7 +158,6 @@ export default function Flashcard({
           </footer>
         </article>
 
-        {/* ------------------------------ 背面 ------------------------------ */}
         <article
           className="study-card__face study-card__face--back"
           inert={!flipped}
@@ -181,13 +199,13 @@ export default function Flashcard({
 
           <footer className="study-card__foot study-card__foot--due">
             <span className="study-card__tags">
-              {gate && word.tags.length > 0 ? (
-                word.tags.slice(0, 4).map((tag) => (
-                  <span key={tag} className="study-card__tag">
-                    #{tag}
-                  </span>
-                ))
-              ) : null}
+              {gate && word.tags.length > 0
+                ? word.tags.slice(0, 4).map((tag) => (
+                    <span key={tag} className="study-card__tag">
+                      #{tag}
+                    </span>
+                  ))
+                : null}
             </span>
 
             <dl className="study-card__due">
@@ -209,12 +227,7 @@ export default function Flashcard({
               </div>
             </dl>
 
-            <button
-              type="button"
-              className="study-speak"
-              onClick={onSpeak}
-              aria-label={`朗读 ${word.term}`}
-            >
+            <button type="button" className="study-speak" onClick={onSpeak} aria-label={`朗读 ${word.term}`}>
               <IconVolume size={15} />
               朗读
             </button>

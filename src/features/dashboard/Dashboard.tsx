@@ -1,5 +1,5 @@
-import { useApp } from '../state/AppState';
-import type { ViewProps } from '../types';
+import { useApp } from '@/app/store';
+import type { ViewProps } from '@/domain/types';
 import {
   DAILY_GOAL,
   getHeatmap,
@@ -7,12 +7,12 @@ import {
   getOverview,
   getRecentActivity,
   getWeakWords,
-} from '../lib/stats';
-import { SRS_STATUS_META } from '../lib/srs';
-import { countAvailable } from '../lib/rounds';
-import { hasResumableSession } from '../lib/practiceRound';
-import { getWeaknessReport } from '../lib/weakness';
-import { percent, relativeTime, truncate, weekdayName } from '../lib/utils';
+} from '@/domain/stats';
+import { WORD_LEARNING_STATUS_META } from '@/domain/stats';
+import { countAvailable } from '@/domain/rounds';
+import { hasResumableSession } from '@/domain/practiceRound';
+import { getWeaknessReport } from '@/domain/weakness';
+import { percent, relativeTime, truncate, weekdayName } from '@/domain/utils';
 import {
   IconArrowRight,
   IconCards,
@@ -20,7 +20,7 @@ import {
   IconFlame,
   IconSparkle,
   IconTarget,
-} from '../components/ui/icons';
+} from '@/ui/icons';
 import './Dashboard.css';
 
 function greeting(now: Date): string {
@@ -258,12 +258,12 @@ export default function Dashboard({ navigate }: ViewProps) {
                     <span
                       className={`dash-recent__icon ${attempt.correct ? 'is-correct' : 'is-wrong'}`}
                     >
-                      {attempt.kind === 'flashcard' ? <IconCards size={15} /> : <IconSparkle size={15} />}
+                      <IconSparkle size={15} />
                     </span>
                     <div className="dash-recent__body">
                       <strong>{word?.term ?? '已删除的词'}</strong>
                       <span>
-                        {attempt.kind === 'flashcard' ? '闪卡自评' : 'AI 练习题'} ·{' '}
+                        练习题 ·{' '}
                         {relativeTime(attempt.createdAt, nowTs)}
                       </span>
                     </div>
@@ -448,7 +448,7 @@ export default function Dashboard({ navigate }: ViewProps) {
                 <div key={status} className="dash-mastery__legend-item">
                   <dt>
                     <span className={`dash-mastery__dot is-${status}`} aria-hidden="true" />
-                    {SRS_STATUS_META[status].label}
+                    {WORD_LEARNING_STATUS_META[status].label}
                   </dt>
                   <dd>{mastery[status]}</dd>
                 </div>

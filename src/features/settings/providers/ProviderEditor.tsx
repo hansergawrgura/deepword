@@ -11,12 +11,12 @@ import type {
   ProviderProfile,
   ThinkingMode,
   Vendor,
-} from '../../types';
-import { checkBaseUrl, VENDOR_OPTIONS, VENDOR_PRESETS, vendorLabel } from '../../lib/providerModel';
-import { testLLMConnection } from '../../lib/llm';
-import type { LLMConnectionResult } from '../../lib/llm';
-import { cx, formatLatency, isLocalEndpoint } from '../../lib/utils';
-import { IconClose, IconEyeToggle, IconRefresh } from '../ui/icons';
+} from '@/domain/types';
+import { checkBaseUrl, VENDOR_OPTIONS, VENDOR_PRESETS, vendorLabel } from '@/infra/llm/providerModel';
+import { testLLMConnection } from '@/infra/llm';
+import type { LLMConnectionResult } from '@/infra/llm';
+import { cx, formatLatency, isLocalEndpoint } from '@/domain/utils';
+import { IconClose, IconEyeToggle, IconRefresh } from '@/ui/icons';
 import ModelListDialog from './ModelListDialog';
 import {
   PROTOCOL_OPTIONS,

@@ -8,12 +8,12 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { LLMSettings } from '../../types';
-import type { ModelInfo } from '../../lib/llm';
-import { fetchModels } from '../../lib/llm';
-import { cx } from '../../lib/utils';
-import { IconRefresh, IconSearch } from '../ui/icons';
-import { Modal } from '../ui/Modal';
+import type { LLMSettings } from '@/domain/types';
+import type { ModelInfo } from '@/infra/llm';
+import { fetchModels } from '@/infra/llm';
+import { cx } from '@/domain/utils';
+import { IconRefresh, IconSearch } from '@/ui/icons';
+import { Modal } from '@/ui/Modal';
 import { buildModelRows, type ModelRow } from './modelRows';
 
 export interface ModelListDialogProps {

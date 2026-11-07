@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { buildModelRows } from './modelRows';
-import type { ModelInfo } from '../../lib/llm';
+import type { ModelInfo } from '@/infra/llm';
 
 const model = (id: string, lifecycle?: string): ModelInfo => ({ id, lifecycle });
 

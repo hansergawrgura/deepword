@@ -9,7 +9,7 @@
  * - 手动添加的标 manual。
  */
 
-import type { ModelInfo } from '../../lib/llm';
+import type { ModelInfo } from '@/infra/llm';
 
 export interface ModelRow {
   model: ModelInfo;

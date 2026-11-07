@@ -1,8 +1,9 @@
 import { useMemo, type JSX } from 'react';
-import { useApp } from '../state/AppState';
-import type { ViewId } from '../types';
-import { getOverview } from '../lib/stats';
-import { APP_VERSION } from '../lib/version';
+import { useApp } from '@/app/store';
+import type { ViewId } from '@/domain/types';
+import { getOverview } from '@/domain/stats';
+import { countAvailable } from '@/domain/rounds';
+import { APP_VERSION } from '@/app/version';
 import {
   IconBook,
   IconCards,
@@ -12,7 +13,7 @@ import {
   IconSliders,
   IconSun,
   type IconProps,
-} from './ui/icons';
+} from '@/ui/icons';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -40,7 +41,11 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
   const overview = useMemo(() => getOverview(data), [data]);
 
   const badgeFor = (id: ViewId): number | undefined => {
-    if (id === 'study') return overview.dueCount + (overview.todayReviewed === 0 ? Math.min(5, overview.newCount) : 0);
+    if (id === 'study') {
+      const available = countAvailable(data);
+      const pending = available.reviewWords + available.newWords;
+      return pending > 0 ? pending : undefined;
+    }
     if (id === 'wordbook') return data.words.length;
     return undefined;
   };

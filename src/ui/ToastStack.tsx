@@ -1,4 +1,4 @@
-import { useApp } from '../../state/AppState';
+import { useApp } from '@/app/store';
 import { IconClose } from './icons';
 
 /** 全局 Toast 堆栈，挂在 App 根部。 */

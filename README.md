@@ -62,7 +62,7 @@ pnpm start      # http://127.0.0.1:8787（单进程托管 dist + /api）
 测试与类型检查：
 
 ```bash
-pnpm test       # vitest：384 个用例（学习流程 124 / LLM 147 / 本地代理 14 / 存储 34 / SRS 12 / 统计 11 / 本地兜底出题 24 / Provider 配置层 12 / 模型行合并 6）
+pnpm test       # vitest：域 / LLM / 代理 / 存储 / store / 学习 optionState 等
 pnpm typecheck
 ```
 
@@ -116,35 +116,23 @@ pnpm typecheck
 ```
 server/
 ├── proxy.mjs                # 零依赖本地代理：/api/health、/api/llm/forward、Vite 中间件、静态托管
-├── proxy.test.mjs           # 代理线协议单测（透传 / 白名单 / 超时 / 限流 / 断连等）
+├── proxy.test.mjs           # 代理线协议单测
 └── index.mjs                # 生产入口：托管 dist/ + /api（默认 127.0.0.1:8787）
 
 src/
-├── types.ts                 # 领域类型（唯一契约来源）
-├── App.tsx                  # 路由（hash）+ 应用外壳
-├── state/AppState.tsx       # 全局数据、写操作、持久化、Toast
-├── lib/
-│   ├── srs.ts               # SM-2 变体记忆排程（数据层保留）
-│   ├── stats.ts             # 仪表盘、错题、薄弱词统计
-│   ├── storage.ts           # localStorage v2 / v1 迁移 / 备份导入导出 / 清洗
-│   ├── providerModel.ts     # provider 配置、当前生效派生、厂商预设与推断
-│   ├── fallbackExercises.ts # 本地兜底出题（数据层保留，供兼容与测试）
-│   ├── practice.ts          # 6 技能本地出题（英译中 / 中译英 / 拼写 / 听音 / 例句 / 互译）
-│   ├── practiceRound.ts     # 一轮的状态机（闸门 → 出题 → 复习 → 小结）
-│   ├── mastery.ts           # 掌握判定（连续对局 + 技能覆盖 + 14 天无错 + 轮次分布）
-│   ├── weakness.ts          # 薄弱分析（6 维度、最弱词、建议重点）
-│   ├── rounds.ts            # 一轮选词（新词 N 个，默认 1 + 按薄弱度复习）
-│   ├── feedback.ts          # AI 流式讲解、互译三档判分、本地降级
-│   ├── tts.ts               # 浏览器语音能力检测与朗读
-│   └── llm/                 # 经本地代理的传输、SSE 流式、模型列表、提示词、校验
-├── data/wordbank.ts         # 内置示例词库
-├── components/
-│   ├── Dashboard.tsx        # 今日（含薄弱分析面板）
-│   ├── study/               # 学习（一轮流程 + 新词闸门）
-│   ├── WordbookView.tsx     # 词库
-│   ├── SettingsView.tsx     # 设置（含练习设置）
-│   ├── providers/           # provider 列表、编辑表单、模型列表弹窗
-│   └── ui/                  # 通用弹窗、图标、Toast
+├── domain/                  # 纯领域：types(v3)、出题、一轮 FSM、掌握、薄弱、统计
+├── infra/
+│   ├── storage/             # localStorage v3（无迁移）、备份导入导出
+│   ├── llm/                 # forward / endpoints / vendors / feedback / providerModel
+│   └── tts/                 # 浏览器语音
+├── app/                     # Shell、Sidebar、store、version
+├── features/
+│   ├── study/               # 学习（controller + 阶段 UI）
+│   ├── dashboard/           # 今日
+│   ├── wordbook/            # 词库
+│   └── settings/            # 设置 + providers
+├── ui/                      # Modal、Toast、icons、ErrorBoundary
+├── data/wordbanks/          # 内置词库 JSON
 └── styles/                  # 设计变量、基础排版、共享组件样式
 ```
 
@@ -154,7 +142,7 @@ src/
 
 ## 已知边界
 
-- 数据格式为 v2（`deepword:data:v2`）：首次打开时旧 v1 数据会自动迁移到 v2，旧键保留一个版本周期不清除；v1 备份仍可导入。1.1.0 只新增了可缺省字段（掌握标记、复习优先、一轮进度），**数据版本没有再升**，旧 v2 数据可直接读取。
+- 数据格式为 v3（`deepword:data:v3`）：**破坏性升级**，不读取、不迁移 v1/v2；首次打开会清旧键并重新播种内置词库。备份导入只接受 `version === 3`。
 - 掌握词永久出队：标记后不再出现在学习与复习队列；当前版本未在界面提供「取消掌握」入口。
 - 仪表盘的「薄弱分析」里点最弱词**只能跳到词库首屏**，不能在词库里直接定位到那一条（已知限制）。
 - 「自动讲解」开关只落盘保存，答错的讲解目前**总会生成**，该开关暂未参与讲解的触发判断。
@@ -163,8 +151,7 @@ src/
 - 互译题每题要调用一次模型（成本与延迟最高），因此占比控制在每轮题量的 1/3 以内；没有配置模型时不出互译题。
 - 听音题依赖浏览器的英文语音：能力检测不到语音时不出听音题（其余题型不受影响）。
 - 数据存在 localStorage，受浏览器配额限制（通常 5 MB）；清除站点数据会丢失记录，建议定期在设置中导出备份。
-- LLM 输出经过严格校验，模型表现不佳时单次生成的题量可能少于请求数量。
-- 学习流程模块（出题、轮状态机、选词、掌握判定、薄弱分析、AI 反馈）已配套单元测试（124 例）；真实浏览器链路仍靠人工验收。
+- 学习领域与 LLM/代理链路有单元测试；真实浏览器流程仍靠人工验收。
 - **没有 chat / 对话界面**：AI 只用于答错讲解与互译判分，不提供自由对话式的学习助手。
 - 所有 LLM 网络链路均由本地代理契约单测与契约一致的 mock 服务验证（OpenAI 兼容 + Anthropic 两条协议、失败回退、Key 不泄漏），真实接口行为取决于服务商实现与网络状况。
 - 数据无多标签页实时同步（同一浏览器多个标签页同时编辑时以最后写入为准）；暂无账号系统与跨设备同步。

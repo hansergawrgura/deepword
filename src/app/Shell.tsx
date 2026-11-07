@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ViewId } from './types';
-import { AppProvider } from './state/AppState';
-import { Sidebar } from './components/Sidebar';
-import Dashboard from './components/Dashboard';
-import WordbookView from './components/WordbookView';
-import SettingsView from './components/SettingsView';
-import StudyView from './components/study/StudyView';
-import { ToastStack } from './components/ui/ToastStack';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import './App.css';
+import type { ViewId } from '@/domain/types';
+import { Sidebar } from './Sidebar';
+import Dashboard from '@/features/dashboard/Dashboard';
+import WordbookView from '@/features/wordbook/WordbookView';
+import SettingsView from '@/features/settings/SettingsView';
+import StudyView from '@/features/study/StudyView';
+import { ToastStack } from '@/ui/ToastStack';
 
 const VIEWS: ViewId[] = ['dashboard', 'study', 'wordbook', 'settings'];
 
@@ -24,7 +21,7 @@ function readViewFromHash(): ViewId {
   return VIEWS.includes(raw as ViewId) ? (raw as ViewId) : 'dashboard';
 }
 
-function Shell() {
+export function Shell() {
   const [view, setView] = useState<ViewId>(readViewFromHash);
 
   const navigate = useCallback((next: ViewId) => {
@@ -55,7 +52,6 @@ function Shell() {
         className="skip-link"
         href="#main-content"
         onClick={(event) => {
-          // 不使用真实 hash 跳转，避免触发 hash 路由把页面切回仪表盘
           event.preventDefault();
           const main = document.getElementById('main-content');
           main?.focus();
@@ -82,15 +78,5 @@ function Shell() {
       </main>
       <ToastStack />
     </div>
-  );
-}
-
-export default function App() {
-  return (
-    <ErrorBoundary>
-      <AppProvider>
-        <Shell />
-      </AppProvider>
-    </ErrorBoundary>
   );
 }

@@ -33,6 +33,22 @@
 - **学习页使用 `.view-stage--fixed`**：四边留白统一为 `--stage-inset`，外框宽高只由可用空间决定、与内容无关；各阶段容器用 `--study-pane-pad` 保持四边一致内边距。不要再给学习页加 `.view-stage--sheet` / `.view-stage--practice` 档位切换，也不要加宽度过渡。
 - 顶部工具条 / 进度条放在 `.view-stage` 之外，作为固定区；进度条在 `.study` 顶部有常驻占位槽，出现 / 消失都不改变舞台纵坐标。
 
+## 目录约定（v3）
+
+```
+src/
+├── domain/     # 纯函数领域：types、出题、一轮 FSM、掌握、薄弱、统计
+├── infra/      # storage（仅 v3）、llm（forward/endpoints/vendors/feedback）、tts
+├── app/        # Shell、Sidebar、store（Context + reducer）、version
+├── features/   # dashboard / study / wordbook / settings
+├── ui/         # Modal、Toast、icons、ErrorBoundary
+├── data/wordbanks/  # 内置词库 JSON
+└── styles/     # tokens / base / ui（view-stage）
+```
+
+- 业务规则进 `domain/`；副作用（AI、TTS、持久化编排）进 controller / `infra` / store，不要堆回视图。
+- 数据键 `deepword:data:v3`；不要恢复 v1/v2 迁移。
+
 ## 其他约定
 
 - 样式只使用 `src/styles/tokens.css` 里的设计变量；暗色主题由 `document.documentElement` 上的 `[data-theme='dark']` 驱动，不要写死颜色。

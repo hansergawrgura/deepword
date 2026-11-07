@@ -1,9 +1,9 @@
 /** Provider 列表：每份配置一张卡片，radio 切换「当前使用」，可编辑 / 删除。 */
 
-import type { ProviderProfile } from '../../types';
-import { providerName, vendorLabel } from '../../lib/providerModel';
-import { cx, isLocalEndpoint } from '../../lib/utils';
-import { IconEdit, IconPlus, IconTrash } from '../ui/icons';
+import type { ProviderProfile } from '@/domain/types';
+import { providerName, vendorLabel } from '@/infra/llm/providerModel';
+import { cx, isLocalEndpoint } from '@/domain/utils';
+import { IconEdit, IconPlus, IconTrash } from '@/ui/icons';
 import { protocolLabel } from './draft';
 
 export interface ProviderListProps {

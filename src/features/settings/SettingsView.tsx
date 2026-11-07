@@ -2,11 +2,11 @@
  * 设置页：多 provider 管理 + 数据管理 + 外观 + 关于。
  *
  * Provider 的增删改 / 切换当前使用只通过 useApp().actions 写入；
- * 列表与编辑表单的展示逻辑拆到 components/providers/ 下。
+ * 列表与编辑表单的展示逻辑拆到 features/settings/providers/ 下。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useApp } from '../state/AppState';
+import { useApp } from '@/app/store';
 import type {
   AppData,
   PracticeSettings,
@@ -14,21 +14,21 @@ import type {
   ProviderProfile,
   ThemeMode,
   TtsSettings,
-} from '../types';
-import { DEFAULT_PRACTICE_SETTINGS, MAX_PROVIDERS } from '../types';
-import { exportBackup, getStorageUsage, parseBackup } from '../lib/storage';
+} from '@/domain/types';
+import { DEFAULT_PRACTICE_SETTINGS, MAX_PROVIDERS } from '@/domain/types';
+import { exportBackup, getStorageUsage, importBackup } from '@/infra/storage/storage';
 import {
   findActiveProvider,
   providerName,
   providerSummaryText,
   resolveActiveLLMSettings,
-} from '../lib/providerModel';
-import { useEnglishVoices } from '../lib/tts';
-import { PROMPT_VERSION } from '../lib/llm';
-import { APP_VERSION } from '../lib/version';
-import { clamp, cx, isLocalEndpoint } from '../lib/utils';
-import { ConfirmDialog } from './ui/ConfirmDialog';
-import { IconCheck, IconDownload, IconPlus, IconSparkle, IconUpload } from './ui/icons';
+} from '@/infra/llm/providerModel';
+import { useEnglishVoices } from '@/infra/tts';
+import { FEEDBACK_PROMPT_VERSION } from '@/infra/llm';
+import { APP_VERSION } from '@/app/version';
+import { clamp, cx, isLocalEndpoint } from '@/domain/utils';
+import { ConfirmDialog } from '@/ui/ConfirmDialog';
+import { IconCheck, IconDownload, IconPlus, IconSparkle, IconUpload } from '@/ui/icons';
 import ProviderEditor from './providers/ProviderEditor';
 import ProviderList from './providers/ProviderList';
 import { thinkingModeLabel } from './providers/draft';
@@ -224,7 +224,7 @@ export default function SettingsView() {
     setImportError('');
     try {
       const text = await file.text();
-      const next = parseBackup(text);
+      const next = importBackup(text);
       setPendingImport(next);
       setDialog('import');
     } catch (error) {
@@ -701,7 +701,7 @@ export default function SettingsView() {
                 </li>
                 <li>
                   <span>提示词版本</span>
-                  <strong className="settings-about__mono">{PROMPT_VERSION}</strong>
+                  <strong className="settings-about__mono">{FEEDBACK_PROMPT_VERSION}</strong>
                 </li>
                 <li>
                   <span>记忆算法</span>

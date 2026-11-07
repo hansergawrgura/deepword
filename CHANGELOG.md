@@ -8,17 +8,33 @@
 
 ## [Unreleased]
 
+---
+
+## [2.0.0] - 2026-11-08
+
+绿场重写：按深模块分层重建代码树；**破坏性数据升级到 v3**。
+
+**版本线**：应用 `2.0.0` · 数据格式 `DATA_VERSION = 3`（`deepword:data:v3`）· 讲解提示词 `FEEDBACK_PROMPT_VERSION = v1`
+
+### 迁移（Migration）
+
+- 本地键改为 `deepword:data:v3`；启动时清除 `deepword:data` / `v1` / `v2` 旧键并重新播种内置词库。
+- **不提供** v1/v2 → v3 自动迁移；旧备份无法导入（仅接受 `version === 3` 的备份 JSON）。学习进度、作答与掌握标记需从零开始。
+
 ### 变更（Changed）
 
-- 学习页选择题（英译中 / 中译英 / 听音 / 例句填空）改为**点选项即提交**：去掉「先选中、再点提交作答」的两步操作；选项前的字母 A / B / C / D 同时作为快捷键，按下即作答。拼写与互译的输入框作答方式不变。
-- 单次提交防重：按键 repeat（长按字母 / 回车）忽略，重复点击同题不重复落库；「能不能作答」只由作答阶段判断，不再额外持锁。
-- **答错不再锁题**：新增 `retry` 作答阶段，答错后输入框 / 选项立即可继续操作（AI 讲解仍在流式输出也不挡），可以一直答到对为止；答对才锁题并出现「下一题」，答错时右栏给「跳过这题」，不想再试也能往下走。
-- 选项「选中 / 答对 / 答错」抽成统一状态模型 `optionState`：任何一次新的作答都会清掉上一轮的强调，界面上永远只强调刚选的那一项，不再出现错选标红与正解标绿同时亮着。
-- 动效 / 声效预留统一出口 `emitOptionFeedback`（`pick` 与 `verdict` 两个时机）与 `data-option-state` 属性，后续接入无需改动任何题目组件。
+- 目录重组：`domain/`（纯领域）· `infra/`（storage / llm / tts）· `app/`（shell + 切片 store）· `features/`（dashboard / study / wordbook / settings）· `ui/`。
+- 领域模型收紧：题型唯一维度为 `Skill`；`Question` 取代 `Exercise`；`Attempt` 仅练习作答；去掉 SRS 排程与 `reviewPriority`。
+- 新词 / 复习划分改为「无作答记录 = 新词」「有作答且未掌握 = 复习」。
+- 学习页：`useStudyController` 独占副作用，`StudyView` 只渲染阶段；保留闸门、点选即答、`retry`、AI 流式讲解与互译判分。
+- LLM：拆成 `endpoints` / `vendors` / `forward`；移除 LLM 批量出题（`generateExercises`）与 `fallbackExercises`。
+- 内置词库改为 `data/wordbanks/default.json`。
 
-### 修复（Fixed）
+### 移除（Removed）
 
-- 同一道题重复作答会重复写入作答结果、虚高正确率并让整轮提前判定答完；现在只记录第一次作答，重试仅影响界面与反馈。
+- SRS 驱动学习、`gradeWord`、闪卡 Attempt、`StudyMode` / `StudyItem`。
+- Phase A 双轨 `ExerciseType` 与 LLM/本地兜底批量出题路径。
+- v1 / v2 localStorage 兼容与迁移代码。
 
 ---
 

@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useApp } from '../state/AppState';
-import type { Word, WordInput } from '../types';
-import { getWordProgressList, type WordProgress } from '../lib/stats';
-import { SRS_STATUS_META } from '../lib/srs';
-import { relativeDue, truncate } from '../lib/utils';
-import { normalizeWord } from '../lib/storage';
-import { Modal } from './ui/Modal';
-import { ConfirmDialog } from './ui/ConfirmDialog';
+import { useApp } from '@/app/store';
+import type { Word, WordInput } from '@/domain/types';
+import { getWordProgressList, WORD_LEARNING_STATUS_META, type WordProgress } from '@/domain/stats';
+import { relativeTime, truncate } from '@/domain/utils';
+import { normalizeWord } from '@/infra/storage/storage';
+import { Modal } from '@/ui/Modal';
+import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import {
   IconDownload,
   IconEdit,
@@ -14,11 +13,11 @@ import {
   IconSearch,
   IconTrash,
   IconUpload,
-} from './ui/icons';
+} from '@/ui/icons';
 import './Wordbook.css';
 
 type FilterKey = 'all' | 'new' | 'learning' | 'review' | 'mastered' | 'mistakes';
-type SortKey = 'recent' | 'alpha' | 'wrong' | 'due';
+type SortKey = 'recent' | 'alpha' | 'wrong' | 'activity';
 
 const PAGE_SIZE = 60;
 
@@ -35,7 +34,7 @@ const SORTS: Array<{ key: SortKey; label: string }> = [
   { key: 'recent', label: '最近添加' },
   { key: 'alpha', label: '字母序' },
   { key: 'wrong', label: '错误最多' },
-  { key: 'due', label: '最先到期' },
+  { key: 'activity', label: '最近作答' },
 ];
 
 interface WordFormState {
@@ -433,7 +432,7 @@ export default function WordbookView() {
       mistakes: 0,
     };
     for (const item of progress) {
-      if (item.card.status in result) result[item.card.status as FilterKey] += 1;
+      if (item.status in result) result[item.status as FilterKey] += 1;
       if (item.wrongCount > 0) result.mistakes += 1;
     }
     return result;
@@ -452,7 +451,7 @@ export default function WordbookView() {
         return false;
       }
       if (filter === 'mistakes') return item.wrongCount > 0;
-      if (filter !== 'all') return item.card.status === filter;
+      if (filter !== 'all') return item.status === filter;
       return true;
     });
     const sorted = [...list];
@@ -463,13 +462,8 @@ export default function WordbookView() {
       case 'wrong':
         sorted.sort((a, b) => b.wrongCount - a.wrongCount || b.attempts - a.attempts);
         break;
-      case 'due':
-        sorted.sort((a, b) => {
-          const aNew = a.card.status === 'new' ? 1 : 0;
-          const bNew = b.card.status === 'new' ? 1 : 0;
-          if (aNew !== bNew) return aNew - bNew;
-          return a.card.dueAt - b.card.dueAt;
-        });
+      case 'activity':
+        sorted.sort((a, b) => (b.lastAttemptAt ?? 0) - (a.lastAttemptAt ?? 0));
         break;
       case 'recent':
       default:
@@ -638,13 +632,13 @@ export default function WordbookView() {
               <span role="columnheader">词条</span>
               <span role="columnheader">释义</span>
               <span role="columnheader">状态</span>
-              <span role="columnheader">复习</span>
+              <span role="columnheader">最近</span>
               <span role="columnheader">错误</span>
               <span role="columnheader" aria-label="操作" />
             </div>
 
-            {shown.map(({ word, card, wrongCount, due }: WordProgress) => {
-              const status = SRS_STATUS_META[card.status];
+            {shown.map(({ word, status: learningStatus, wrongCount, lastAttemptAt }: WordProgress) => {
+              const status = WORD_LEARNING_STATUS_META[learningStatus];
               return (
                 <div className="wordbook-row" role="row" key={word.id}>
                   <div className="wordbook-row__term" role="cell">
@@ -681,11 +675,9 @@ export default function WordbookView() {
                     </div>
 
                     <div className="wordbook-row__due" role="cell">
-                      {card.status === 'new'
+                      {learningStatus === 'new' || !lastAttemptAt
                         ? '未开始'
-                        : due
-                          ? '已到期'
-                          : relativeDue(card.dueAt)}
+                        : relativeTime(lastAttemptAt)}
                     </div>
 
                     <div className="wordbook-row__wrong" role="cell">
