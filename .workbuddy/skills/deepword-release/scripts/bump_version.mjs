@@ -2,10 +2,9 @@
 /**
  * DeepWord 应用版本号发布脚本。
  *
- * 同步四个位置，并把 CHANGELOG 的 [Unreleased] 段落转成正式版本条目：
+ * 同步三个位置，并把 CHANGELOG 的 [Unreleased] 段落转成正式版本条目：
  *   - package.json 的 version
  *   - src/lib/version.ts 的 APP_VERSION
- *   - docs/version-spec.md §1 表格中「应用版本」的当前值
  *   - CHANGELOG.md 的 [Unreleased] → [新版本] - 日期
  *
  * 用法：
@@ -103,7 +102,6 @@ const root = findRepoRoot();
 const files = {
   pkg: join(root, 'package.json'),
   versionTs: join(root, 'src/lib/version.ts'),
-  spec: join(root, 'docs/version-spec.md'),
   changelog: join(root, 'CHANGELOG.md'),
 };
 
@@ -143,23 +141,7 @@ update('src/lib/version.ts', files.versionTs, (raw) => {
   return raw.replace(pattern, `export const APP_VERSION = '${opts.version}'`);
 });
 
-// 3) docs/version-spec.md：只改 §1 表格里「应用版本」那一行的当前值，
-//    不碰 §2.x 的历史规格基线标题与正文。
-update('docs/version-spec.md', files.spec, (raw) => {
-  const lines = raw.split('\n');
-  let hit = false;
-  const next = lines.map((line) => {
-    if (!line.startsWith('| **应用版本** |')) return line;
-    const needle = `\`${oldVersion}\``;
-    if (!line.includes(needle)) return line;
-    hit = true;
-    return line.replace(needle, `\`${opts.version}\``);
-  });
-  if (!hit) fail('docs/version-spec.md 的「应用版本」表格行中找不到当前版本号');
-  return next.join('\n');
-});
-
-// 4) CHANGELOG.md：把 [Unreleased] 的内容发布为新版本，并留下空的 Unreleased。
+// 3) CHANGELOG.md：把 [Unreleased] 的内容发布为新版本，并留下空的 Unreleased。
 update('CHANGELOG.md', files.changelog, (raw) => {
   const header = '## [Unreleased]\n';
   const at = raw.indexOf(header);
@@ -184,5 +166,5 @@ if (opts.dryRun) {
   console.log('\n--- CHANGELOG.md 预览（前 24 行）---');
   console.log(changes.at(-1).after.split('\n').slice(0, 24).join('\n'));
 } else {
-  console.log('\n下一步：复核以上 4 个文件 → 跑 pnpm typecheck / test / build → git add + commit。');
+  console.log('\n下一步：复核以上 3 个文件 → 跑 pnpm typecheck / test / build → git add + commit。');
 }

@@ -36,4 +36,4 @@
 ## 其他约定
 
 - 样式只使用 `src/styles/tokens.css` 里的设计变量；暗色主题由 `document.documentElement` 上的 `[data-theme='dark']` 驱动，不要写死颜色。
-- 协作分工与写入范围见 [docs/agents.md](docs/agents.md)；产品需求与内部契约见 [docs/](docs/)。注意：`docs/` 中关于「闪卡 tab」「错题特训 / `#/drill`」的章节是历史设计记录，当前实现已移除这两个界面，不要再据此新增入口或视图。
+- 闪卡自查 tab 与错题特训页（`#/drill`）已移除，不要再新增入口或视图。

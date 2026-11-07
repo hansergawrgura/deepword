@@ -2,8 +2,6 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/) 与 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-版本线说明（应用版本 / 数据版本 / 提示词版本）见 [版本规格](docs/version-spec.md)。
-
 分类约定：`新增`（Added）、`变更`（Changed）、`迁移`（Migration）、`修复`（Fixed）、`移除`（Removed）、`安全`（Security）、`文档`（Docs）。
 
 ---

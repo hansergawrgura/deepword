@@ -6,26 +6,6 @@
 
 前端为 React 19 + Vite 6 + TypeScript，数据只保存在浏览器 localStorage。AI 请求不再由浏览器直接连接厂商，而是经**同源本地代理**（`/api/llm/forward`）转发，兼容 OpenAI 与 Anthropic 两种协议，可用 DeepSeek、通义千问、Kimi、智谱、Ollama 等兼容服务。
 
-## 界面预览
-
-| 今日 · 仪表盘 | 学习 · 一轮 |
-| --- | --- |
-| ![今日仪表盘](docs/screenshots/dashboard.jpg) | ![学习页](docs/screenshots/study.jpg) |
-
-| 词库 | 设置 |
-| --- | --- |
-| ![词库](docs/screenshots/wordbook.jpg) | ![设置](docs/screenshots/settings.jpg) |
-
-<table>
-  <tr>
-    <td align="center"><img src="docs/screenshots/mobile-dashboard.jpg" width="260" alt="移动端仪表盘" /><br /><sub>移动端 · 今日</sub></td>
-    <td align="center"><img src="docs/screenshots/mobile-study.jpg" width="260" alt="移动端学习" /><br /><sub>移动端 · 学习</sub></td>
-    <td align="center"><img src="docs/screenshots/study-back.jpg" width="260" alt="词笺背面" /><br /><sub>闸门词笺背面 · 释义与例句</sub></td>
-  </tr>
-</table>
-
----
-
 ## 功能
 
 - **统一学习流程**：闸门 → 新词多模块出题 → 每轮必复习 → 小结 → 继续下一轮。一轮 = 新词 N 个（默认 1，可调 1~10；每词 4~8 题，默认 6）→ 复习 4~6 词（题量 `词数～2×词数`，默认 10）→ 小结 → 点「继续」下一轮；进度存在本机，中途退出可恢复。
@@ -191,15 +171,7 @@ src/
 
 ## 文档
 
-| 文档 | 内容 |
-| --- | --- |
-| [CHANGELOG.md](CHANGELOG.md) | 版本更新日志（Keep a Changelog / SemVer） |
-| [docs/spec.md](docs/spec.md) | 产品需求与验收规格：视图、功能行为、判定规则、验收清单 |
-| [docs/architecture.md](docs/architecture.md) | 架构与数据流：分层、状态管理、持久化、LLM 层细节、测试策略 |
-| [docs/version-spec.md](docs/version-spec.md) | 版本规格：应用 / 数据 / 提示词三条版本线、迁移规则、发布流程 |
-| [docs/v2-design.md](docs/v2-design.md) | 2.0 设计稿：Phase A / B 目标与验收约定（两者均已实现） |
-| [docs/phase-b-contract.md](docs/phase-b-contract.md) | Phase B 内部契约：学习流程各模块的接口与判定口径 |
-| [docs/agents.md](docs/agents.md) | 协作分工：Lead 与各代理的职责边界、协作机制、迭代复用方式 |
+版本更新日志见 [CHANGELOG.md](CHANGELOG.md)（Keep a Changelog / SemVer）。
 
 ## License
 
