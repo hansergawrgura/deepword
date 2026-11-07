@@ -9,8 +9,8 @@
  * - 提示词里不会携带 API Key，也不会要求模型回显设置信息。
  */
 
-import type { Word } from '../../types';
-import type { AnswerFeedbackInput, TranslateGradeInput } from '../feedback';
+import type { Word } from '@/domain/types';
+import type { AnswerFeedbackInput, TranslateGradeInput } from './feedback';
 import type { ChatMessage } from './types';
 
 /** 讲解 / 判分提示词版本号（与出题 PROMPT_VERSION 独立；调整提示词策略时递增）。 */
@@ -55,18 +55,18 @@ function buildWordContextLines(word: Word): string[] {
 
 /** 答错讲解的 messages：system 固定，user 携带词条、题目、作答与正确答案。 */
 export function buildAnswerFeedbackMessages(input: AnswerFeedbackInput): ChatMessage[] {
-  const { word, exercise, response } = input;
+  const { word, question, response } = input;
   const userLines: string[] = [
     '学员刚刚答错了一道英语练习，请根据下面的信息给出讲解。',
     '',
     ...buildWordContextLines(word),
     '',
-    `【题目类型】${exercise.type}${exercise.skill ? `（技能：${exercise.skill}）` : ''}`,
-    `【题干】${exercise.prompt}`,
+    `【技能】${question.skill}`,
+    `【题干】${question.prompt}`,
     `【学员作答】${response.trim() || '（留白）'}`,
-    `【正确答案】${exercise.answer}`,
+    `【正确答案】${question.answer}`,
   ];
-  if (exercise.explanation) userLines.push(`【已有解析】${exercise.explanation}`);
+  if (question.explanation) userLines.push(`【已有解析】${question.explanation}`);
   userLines.push(
     '',
     '请严格按「错因：」「记忆点：」「改进：」三段输出中文纯文本，不要 JSON、不要 markdown，总字数 ≤200 字。',
@@ -79,9 +79,9 @@ export function buildAnswerFeedbackMessages(input: AnswerFeedbackInput): ChatMes
 
 /** 互译判分的 messages：system 固定，user 携带方向、原题、参考译文与学员译文。 */
 export function buildTranslationMessages(input: TranslateGradeInput): ChatMessage[] {
-  const { word, exercise, response } = input;
+  const { word, question, response } = input;
   const direction =
-    exercise.direction === 'zh2en'
+    question.direction === 'zh2en'
       ? 'zh2en（中译英：把中文译成英文）'
       : 'en2zh（英译中：把英文译成中文）';
 
@@ -91,8 +91,8 @@ export function buildTranslationMessages(input: TranslateGradeInput): ChatMessag
     `【互译方向】${direction}`,
     ...buildWordContextLines(word),
     '',
-    `【题目】${exercise.prompt}`,
-    `【参考译文】${exercise.answer}`,
+    `【题目】${question.prompt}`,
+    `【参考译文】${question.answer}`,
     `【学员译文】${response.trim() || '（留白）'}`,
     '',
     '请严格按以下格式输出：',

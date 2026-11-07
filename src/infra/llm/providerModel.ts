@@ -13,8 +13,8 @@ import {
   type ProviderKind,
   type ProviderProfile,
   type Vendor,
-} from '../types';
-import { clamp, uid } from './utils';
+} from '@/domain/types';
+import { clamp, uid } from '@/domain/utils';
 
 /* ------------------------------------------------------------------ */
 /* 厂商                                                                */

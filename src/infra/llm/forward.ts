@@ -10,9 +10,22 @@
  * - `fetchModels` / `testLLMConnection` 永不抛错，失败返回中文 warning / 可操作提示。
  */
 
-import type { LLMSettings, ProviderKind } from '../../types';
+import type { LLMSettings, ProviderKind } from '@/domain/types';
+import {
+  resolveEndpoint,
+  resolveModelsEndpoint,
+  resolveOllamaTagsEndpoint,
+  isOfficialAnthropicHost,
+} from './endpoints';
+import {
+  applyThinkingParams,
+  hasThinkingParams,
+  mentionsStreamParam,
+  mentionsThinkingParam,
+  removeThinkingParams,
+} from './vendors';
 import type {
-  ChatCompleteOptions,
+  ChatCompleteExtOptions,
   ChatMessage,
   FetchModelsResult,
   LLMConnectionResult,
@@ -20,6 +33,9 @@ import type {
   StreamChatOptions,
 } from './types';
 import { LLMError } from './types';
+
+export { normalizeBaseUrl, resolveEndpoint } from './endpoints';
+export { buildThinkingParams, THINKING_PARAM_KEYS } from './vendors';
 
 /** 普通请求默认超时：90 秒。 */
 export const DEFAULT_TIMEOUT_MS = 90_000;
@@ -29,19 +45,6 @@ export const CONNECTION_TEST_TIMEOUT_MS = 20_000;
 export const ANTHROPIC_VERSION = '2023-06-01';
 /** 本地代理转发入口（同源，浏览器只认这个路径）。 */
 export const LLM_FORWARD_PATH = '/api/llm/forward';
-
-/**
- * chatComplete 的扩展参数。
- * 类型契约里的 ChatCompleteOptions 由 Lead 维护、只读，因此在这里做本地扩展。
- */
-export interface ChatCompleteExtOptions extends ChatCompleteOptions {
-  /** 请求 JSON 模式（OpenAI response_format）；服务端不支持时自动去掉重试一次。 */
-  jsonMode?: boolean;
-  /** 覆盖默认 90s 超时。 */
-  timeoutMs?: number;
-  /** 强制关闭思考（连通性测试 / 判分等场景用）；默认遵 settings.thinkingMode。 */
-  noThink?: boolean;
-}
 
 /* ------------------------------------------------------------------ */
 /* 设置校验                                                            */
@@ -65,101 +68,8 @@ function assertUsableSettings(settings: LLMSettings): void {
 }
 
 /* ------------------------------------------------------------------ */
-/* URL 规范化（纯函数，可单测）                                        */
-/* ------------------------------------------------------------------ */
-
-/** 去掉首尾空白与末尾斜杠。 */
-export function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.trim().replace(/\/+$/, '');
-}
-
-/** 去掉协议与主机后，是否还有非根路径。 */
-function hasNonRootPath(baseUrl: string): boolean {
-  const withoutOrigin = normalizeBaseUrl(baseUrl).replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]+/i, '');
-  return withoutOrigin.length > 0;
-}
-
-/** 取 `scheme://host[:port]` 形式的 origin；非法 URL 返回 null。 */
-function extractOrigin(baseUrl: string): string | null {
-  const match = /^([a-z][a-z0-9+.-]*:\/\/[^/?#]+)/i.exec(normalizeBaseUrl(baseUrl));
-  return match ? match[1] : null;
-}
-
-/** 路径末段是否为版本层（如 `/v1`、`/v2`、`/v1beta`）。 */
-function endsWithApiVersion(baseUrl: string): boolean {
-  return /\/v\d+(?:[a-z]+\d*)?$/i.test(normalizeBaseUrl(baseUrl));
-}
-
-/**
- * 解析最终请求地址：
- * - OpenAI 兼容：`https://api.deepseek.com/v1` → `.../v1/chat/completions`；
- *   只填主机（如 `http://localhost:11434`）时补 `/v1/chat/completions`；
- *   已包含 `/chat/completions` 时原样使用，避免重复拼接。
- * - Anthropic：官方 `https://api.anthropic.com` 或填到版本层（`.../v1`）时补 `/messages`；
- *   已包含 `/messages` 时原样使用；只填厂商前缀（如火山方舟 `.../api/coding`、
- *   DeepSeek `.../anthropic`）时补 `/v1/messages`（Anthropic SDK 约定）。
- */
-export function resolveEndpoint(settings: Pick<LLMSettings, 'provider' | 'baseUrl'>): string {
-  const base = normalizeBaseUrl(settings.baseUrl);
-  if (!base) {
-    throw new LLMError('config', '尚未填写 Base URL，请到设置页补全（例如 https://api.deepseek.com/v1）。');
-  }
-
-  if (settings.provider === 'anthropic') {
-    if (/\/messages$/i.test(base)) return base;
-    if (endsWithApiVersion(base)) return `${base}/messages`;
-    // 兼容网关通常只给厂商前缀（火山方舟 /api/coding、DeepSeek /anthropic 等），
-    // 真实端点是 {前缀}/v1/messages；只填主机时也走这里。
-    return `${base}/v1/messages`;
-  }
-
-  if (/\/chat\/completions$/i.test(base)) return base;
-  if (/\/v1$/i.test(base)) return `${base}/chat/completions`;
-  if (!hasNonRootPath(base)) return `${base}/v1/chat/completions`;
-  return `${base}/chat/completions`;
-}
-
-/**
- * 解析模型列表地址：
- * - OpenAI 兼容：`{base}/models`（base 已含 `/v1` 时不再重复；只填主机时补 `/v1/models`）；
- * - Anthropic：填到版本层时补 `/models`；只填主机 / 厂商前缀时补 `/v1/models`。
- */
-function resolveModelsEndpoint(settings: Pick<LLMSettings, 'provider' | 'baseUrl'>): string {
-  const base = normalizeBaseUrl(settings.baseUrl);
-  if (!base) {
-    throw new LLMError('config', '尚未填写 Base URL，请到设置页补全。');
-  }
-
-  if (settings.provider === 'anthropic') {
-    if (/\/models$/i.test(base)) return base;
-    if (endsWithApiVersion(base)) return `${base}/models`;
-    return `${base}/v1/models`;
-  }
-
-  const normalized = base.replace(/\/chat\/completions$/i, '');
-  if (/\/models$/i.test(normalized)) return normalized;
-  if (/\/v1$/i.test(normalized)) return `${normalized}/models`;
-  if (!hasNonRootPath(normalized)) return `${normalized}/v1/models`;
-  return `${normalized}/models`;
-}
-
-/** Ollama 原生模型列表：`{origin}/api/tags`（用于 OpenAI 兼容 `/models` 失败时的兜底）。 */
-function resolveOllamaTagsEndpoint(baseUrl: string): string | null {
-  const origin = extractOrigin(baseUrl);
-  return origin ? `${origin}/api/tags` : null;
-}
-
-/* ------------------------------------------------------------------ */
 /* 请求头 / 请求体（纯函数，可单测）                                   */
 /* ------------------------------------------------------------------ */
-
-/** 是否为 Anthropic 官方主机（官方只认 x-api-key，不应额外发 Authorization）。 */
-function isOfficialAnthropicHost(baseUrl: string): boolean {
-  const origin = extractOrigin(baseUrl);
-  if (!origin) return false;
-  const host = origin.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/:\d+$/, '').toLowerCase();
-  return host === 'api.anthropic.com';
-}
 
 /**
  * 构造发给上游的请求头。
@@ -188,89 +98,6 @@ export function buildRequestHeaders(settings: LLMSettings): Record<string, strin
   }
 
   return headers;
-}
-
-/* ------------------------------------------------------------------ */
-/* 思考参数（按 vendor 白名单注入）                                    */
-/* ------------------------------------------------------------------ */
-
-/** 上游可能拒绝的「关闭思考」参数名，用于 400 去参重试。 */
-const THINKING_PARAM_KEYS = ['thinking', 'reasoning_effort', 'enable_thinking'] as const;
-
-/** Kimi K3 系列用 `reasoning_effort: 'low'` 关闭思考（其余 Kimi 模型用 thinking.disabled）。 */
-const KIMI_K3_PATTERN = /(^|[^a-z0-9])k3([^a-z0-9]|$)/i;
-
-/**
- * 按契约表格返回该 vendor 的「关闭思考」参数；不支持的 vendor 返回 {}。
- *
- * | vendor | 参数 |
- * | --- | --- |
- * | anthropic / deepseek / glm / volcengine（火山方舟） | `thinking:{type:'disabled'}` |
- * | qwen / siliconflow | `enable_thinking:false` |
- * | openai | `reasoning_effort:'minimal'` |
- * | ollama | `reasoning_effort:'none'` |
- * | kimi | `thinking:{type:'disabled'}`（K3 系列改 `reasoning_effort:'low'`） |
- * | minimax / custom / 缺省 | 不发 |
- */
-export function buildThinkingParams(settings: LLMSettings): Record<string, unknown> {
-  switch (settings.vendor) {
-    case 'anthropic':
-    case 'deepseek':
-    case 'glm':
-    case 'volcengine':
-      return { thinking: { type: 'disabled' } };
-    case 'qwen':
-    case 'siliconflow':
-      return { enable_thinking: false };
-    case 'openai':
-      return { reasoning_effort: 'minimal' };
-    case 'ollama':
-      return { reasoning_effort: 'none' };
-    case 'kimi':
-      return KIMI_K3_PATTERN.test(settings.model.trim())
-        ? { reasoning_effort: 'low' }
-        : { thinking: { type: 'disabled' } };
-    default:
-      return {};
-  }
-}
-
-/** 是否该注入关闭思考参数：显式 noThink 或 settings.thinkingMode === 'off'。 */
-function shouldInjectThinking(settings: LLMSettings, noThink?: boolean): boolean {
-  return noThink === true || settings.thinkingMode === 'off';
-}
-
-/** 把思考参数合并进请求体（无参数时原样返回）。 */
-function applyThinkingParams(
-  body: Record<string, unknown>,
-  settings: LLMSettings,
-  noThink?: boolean,
-): Record<string, unknown> {
-  if (!shouldInjectThinking(settings, noThink)) return body;
-  const params = buildThinkingParams(settings);
-  if (Object.keys(params).length === 0) return body;
-  return { ...body, ...params };
-}
-
-function hasThinkingParams(body: Record<string, unknown>): boolean {
-  return THINKING_PARAM_KEYS.some((key) => body[key] !== undefined);
-}
-
-/** 深拷贝并去掉思考参数。 */
-function removeThinkingParams(body: Record<string, unknown>): Record<string, unknown> {
-  const next: Record<string, unknown> = { ...body };
-  for (const key of THINKING_PARAM_KEYS) delete next[key];
-  return next;
-}
-
-/** 上游 400 文本里是否点名了思考参数（点名才重试，避免无谓请求）。 */
-function mentionsThinkingParam(text: string): boolean {
-  return /thinking|reasoning_effort|enable_thinking/i.test(text);
-}
-
-/** 上游 400 文本里是否点名了 stream 参数（点名才去掉流式标记重试）。 */
-function mentionsStreamParam(text: string): boolean {
-  return /stream/i.test(text);
 }
 
 /* ------------------------------------------------------------------ */

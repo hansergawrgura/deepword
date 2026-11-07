@@ -1,14 +1,5 @@
 /**
- * 浏览器语音合成（Phase B）—— 见 docs/phase-b-contract.md §6。
- *
- * 只用浏览器内置 SpeechSynthesis，零依赖、零成本；云端 TTS 留待以后。
- * 所有函数在无 speechSynthesis 或非浏览器环境下安全降级（空数组 / false / 空操作）。
- *
- * 说明：本文件由两个并行会话同时产出过（Lead 指派的 feedback-engine 与另一会话），
- * 现合并为一份契约一致的实现：
- * - 保留另一会话的 `isSpeechSupported` 判定、Safari 手势提示与 300ms 二次同步；
- * - 按契约把 `speak` 的 rate 缺省值定为 1；
- * - `pickEnglishVoice` 优先 en-US → en-GB → 列表首个。
+ * 浏览器语音合成（SpeechSynthesis）。
  */
 
 import { useEffect, useState } from 'react';
@@ -87,7 +78,6 @@ export function speak(
     } else {
       utterance.lang = 'en-US';
     }
-    // 契约：rate 缺省 1（1 ≈ 正常语速）。
     const rate = options.rate;
     utterance.rate =
       typeof rate === 'number' && Number.isFinite(rate) && rate > 0 ? rate : 1;
@@ -117,7 +107,6 @@ export function useEnglishVoices(): TtsVoice[] {
     const sync = () => setVoices(listEnglishVoices());
     sync();
     window.speechSynthesis.addEventListener?.('voiceschanged', sync);
-    // 某些浏览器首帧拿不到语音列表，补一次短延时再同步。
     const timer = window.setTimeout(sync, 300);
     return () => {
       window.speechSynthesis.removeEventListener?.('voiceschanged', sync);

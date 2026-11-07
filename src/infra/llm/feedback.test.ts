@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Exercise, LLMSettings, Word } from '../types';
+import type { LLMSettings, Question, Word } from '@/domain/types';
 import {
   encouragement,
   localAnswerFeedback,
@@ -39,29 +39,25 @@ const WORD: Word = {
   createdAt: NOW,
 };
 
-const CHOICE: Exercise = {
+const CHOICE: Question = {
   id: 'ex_1',
   wordId: 'w1',
-  type: 'choice',
+  skill: 'en2zh',
   prompt: '「abandon」最接近以下哪个意思？',
   options: ['放弃；抛弃', '蜡烛'],
   answer: '放弃；抛弃',
   explanation: '「abandon」意为「放弃；抛弃」。',
   difficulty: 2,
-  source: 'local',
-  skill: 'en2zh',
 };
 
-const TRANSLATE: Exercise = {
+const TRANSLATE: Question = {
   id: 'ex_2',
   wordId: 'w1',
-  type: 'translate',
+  skill: 'translate',
   prompt: '把下面的英文句子翻译成中文：He abandoned the plan last year.',
   answer: '他去年放弃了这个计划。',
   explanation: '参考译文：他去年放弃了这个计划。',
   difficulty: 4,
-  source: 'local',
-  skill: 'translate',
   direction: 'en2zh',
 };
 
@@ -187,7 +183,7 @@ describe('localAnswerFeedback', () => {
   it('降级讲解含「错因 / 记忆点 / 改进」三段且状态为 local-fallback', () => {
     const feedback = localAnswerFeedback({
       word: WORD,
-      exercise: CHOICE,
+      question: CHOICE,
       response: '蜡烛',
     });
     expect(feedback.status).toBe('local-fallback');
@@ -199,7 +195,7 @@ describe('localAnswerFeedback', () => {
   });
 
   it('留白时也给出可读讲解', () => {
-    const feedback = localAnswerFeedback({ word: WORD, exercise: CHOICE, response: '  ' });
+    const feedback = localAnswerFeedback({ word: WORD, question: CHOICE, response: '  ' });
     expect(feedback.status).toBe('local-fallback');
     expect(feedback.explanation).toContain('留白');
   });
@@ -209,7 +205,7 @@ describe('localTranslationGrade', () => {
   it('与参考译文一致判 perfect', () => {
     const grade = localTranslationGrade({
       word: WORD,
-      exercise: TRANSLATE,
+      question: TRANSLATE,
       response: TRANSLATE.answer,
     });
     expect(grade.verdict).toBe('perfect');
@@ -220,7 +216,7 @@ describe('localTranslationGrade', () => {
   it('意思接近判 good', () => {
     const grade = localTranslationGrade({
       word: WORD,
-      exercise: TRANSLATE,
+      question: TRANSLATE,
       response: '他去年放弃了那个计划。',
     });
     expect(grade.verdict).toBe('good');
@@ -229,14 +225,14 @@ describe('localTranslationGrade', () => {
   it('意思差距大判 poor', () => {
     const grade = localTranslationGrade({
       word: WORD,
-      exercise: TRANSLATE,
+      question: TRANSLATE,
       response: '今天的天气非常好。',
     });
     expect(grade.verdict).toBe('poor');
   });
 
   it('留白判 poor', () => {
-    const grade = localTranslationGrade({ word: WORD, exercise: TRANSLATE, response: '' });
+    const grade = localTranslationGrade({ word: WORD, question: TRANSLATE, response: '' });
     expect(grade.verdict).toBe('poor');
     expect(grade.explanation).toContain('留白');
   });
@@ -260,14 +256,14 @@ describe('未配置模型时的降级', () => {
 
   it('streamAnswerFeedback 未配置时返回 local-fallback 且不抛错', async () => {
     await expect(
-      streamAnswerFeedback({ word: WORD, exercise: CHOICE, response: '蜡烛' }, unconfigured),
+      streamAnswerFeedback({ word: WORD, question: CHOICE, response: '蜡烛' }, unconfigured),
     ).resolves.toMatchObject({ status: 'local-fallback' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('streamTranslationGrade 未配置时返回 local-fallback 且不抛错', async () => {
     const grade = await streamTranslationGrade(
-      { word: WORD, exercise: TRANSLATE, response: '他去年放弃了这个计划。' },
+      { word: WORD, question: TRANSLATE, response: '他去年放弃了这个计划。' },
       unconfigured,
     );
     expect(grade.status).toBe('local-fallback');
@@ -278,7 +274,7 @@ describe('未配置模型时的降级', () => {
   it('网络失败时降级为本地讲解，不抛错', async () => {
     fetchMock.mockRejectedValue(new Error('network down'));
     const feedback = await streamAnswerFeedback(
-      { word: WORD, exercise: CHOICE, response: '蜡烛' },
+      { word: WORD, question: CHOICE, response: '蜡烛' },
       makeSettings(),
     );
     expect(feedback.status).toBe('local-fallback');
@@ -297,7 +293,7 @@ describe('streamAnswerFeedback（mock /api/llm/forward）', () => {
 
     const tokens: string[] = [];
     const feedback = await streamAnswerFeedback(
-      { word: WORD, exercise: CHOICE, response: 'abdicate' },
+      { word: WORD, question: CHOICE, response: 'abdicate' },
       makeSettings(),
       { onToken: (chunk) => tokens.push(chunk) },
     );
@@ -320,7 +316,7 @@ describe('streamTranslationGrade（mock /api/llm/forward）', () => {
     const verdicts: string[] = [];
     const tokens: string[] = [];
     const grade = await streamTranslationGrade(
-      { word: WORD, exercise: TRANSLATE, response: '他放弃了这个计划。' },
+      { word: WORD, question: TRANSLATE, response: '他放弃了这个计划。' },
       makeSettings(),
       {
         onToken: (chunk) => tokens.push(chunk),
@@ -340,7 +336,7 @@ describe('streamTranslationGrade（mock /api/llm/forward）', () => {
   it('模型没按协议输出时降级为本地判分', async () => {
     fetchMock.mockResolvedValue(sseResponse([openAIDelta('这段译文看起来还不错。')]));
     const grade = await streamTranslationGrade(
-      { word: WORD, exercise: TRANSLATE, response: '他去年放弃了这个计划。' },
+      { word: WORD, question: TRANSLATE, response: '他去年放弃了这个计划。' },
       makeSettings(),
     );
     expect(grade.status).toBe('local-fallback');

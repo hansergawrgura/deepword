@@ -11,8 +11,8 @@
 import http from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startServer, type StartedServer } from '../../../server/proxy.mjs';
-import type { LLMSettings } from '../../types';
-import { LLM_FORWARD_PATH, streamChat } from './providers';
+import type { LLMSettings } from '@/domain/types';
+import { LLM_FORWARD_PATH, streamChat } from './forward';
 
 let upstream: http.Server;
 let upstreamPort = 0;

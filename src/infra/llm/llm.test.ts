@@ -6,12 +6,11 @@
  *
  * 覆盖：URL 规范化、OpenAI / Anthropic 请求构造与响应解析、思考参数映射与 400 去参重试、
  * response_format 降级重试、错误码映射、SSE 两条协议流式解析、模型列表、连通性测试不抛错、
- * 提示词内容、以及生成层的 JSON 容错 / 严格校验 / 答案修正 / 选项打乱 / 去重 / 题量限制 / 取消。
+ * 提示词内容（v3 不含出题生成）。
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LLMSettings, Word } from '../../types';
-import type { ExerciseRequest, ExerciseTarget } from './types';
+import type { LLMSettings } from '@/domain/types';
 import { LLMError } from './types';
 import {
   ANTHROPIC_VERSION,
@@ -35,9 +34,7 @@ import {
   splitAnthropicMessages,
   streamChat,
   testLLMConnection,
-} from './providers';
-import { buildMessages, PROMPT_VERSION, SYSTEM_PROMPT } from './prompts';
-import { extractJsonCandidate, generateExercises, parseExercises } from './generate';
+} from './forward';
 import * as llmEntry from './index';
 
 /* ------------------------------------------------------------------ */
@@ -123,10 +120,6 @@ function openAICompletion(content: string): Response {
 
 function anthropicCompletion(text: string): Response {
   return jsonResponse({ content: [{ type: 'text', text }] });
-}
-
-function completionWithExercises(exercises: unknown[]): Response {
-  return openAICompletion(JSON.stringify({ exercises }));
 }
 
 /** 构造一个可流式读取的 SSE 响应；chunks 按给定顺序入队。 */
@@ -223,77 +216,6 @@ function anthropicSettings(overrides: Partial<LLMSettings> = {}): LLMSettings {
     model: 'claude-3-5-sonnet-latest',
     ...overrides,
   });
-}
-
-function makeWord(overrides: Partial<Word> = {}): Word {
-  return {
-    id: 'w_abandon',
-    term: 'abandon',
-    meaning: '放弃；抛弃',
-    partOfSpeech: 'v.',
-    example: 'He abandoned the plan.',
-    exampleTranslation: '他放弃了这个计划。',
-    tags: ['CET-4'],
-    createdAt: 1_700_000_000_000,
-    ...overrides,
-  };
-}
-
-function makeTarget(overrides: Partial<ExerciseTarget> = {}): ExerciseTarget {
-  return {
-    word: makeWord(),
-    wrongCount: 3,
-    correctStreak: 0,
-    srsStatus: 'learning',
-    lastExerciseType: 'choice',
-    recentAccuracy: 0.3,
-    ...overrides,
-  };
-}
-
-function targetFor(wordId: string, term = 'abandon'): ExerciseTarget {
-  return makeTarget({ word: makeWord({ id: wordId, term }) });
-}
-
-function makeRequest(overrides: Partial<ExerciseRequest> = {}): ExerciseRequest {
-  return {
-    targets: [makeTarget()],
-    count: 2,
-    difficulty: 'adaptive',
-    settings: makeSettings(),
-    ...overrides,
-  };
-}
-
-function choiceItem(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    wordId: 'w_abandon',
-    type: 'choice',
-    prompt: '「abandon」最接近的意思是？',
-    options: ['放弃；抛弃', '建造', '灌溉', '测量'],
-    answer: '放弃；抛弃',
-    acceptableAnswers: [],
-    explanation: 'abandon 表示放弃、抛弃。',
-    difficulty: 3,
-    ...overrides,
-  };
-}
-
-function fillItem(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    wordId: 'w_abandon',
-    type: 'fill',
-    prompt: 'He decided to ____ the plan.',
-    answer: 'abandon',
-    acceptableAnswers: ['abandoned', 'give up'],
-    explanation: 'decide to do 后接动词原形 abandon。',
-    difficulty: 2,
-    ...overrides,
-  };
-}
-
-function payloadOf(...exercises: unknown[]): string {
-  return JSON.stringify({ exercises });
 }
 
 function syncLLMError(fn: () => unknown): LLMError {
@@ -1609,375 +1531,18 @@ describe('testLLMConnection', () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* prompts                                                             */
-/* ------------------------------------------------------------------ */
-
-describe('prompts', () => {
-  it('导出提示词版本与中文系统提示', () => {
-    expect(PROMPT_VERSION.length).toBeGreaterThan(0);
-    expect(SYSTEM_PROMPT).toContain('资深');
-    expect(SYSTEM_PROMPT).toContain('JSON');
-    expect(SYSTEM_PROMPT).toContain('____');
-    expect(SYSTEM_PROMPT).toContain('correction');
-  });
-
-  it('buildMessages 携带错词上下文与输出格式约束', () => {
-    const messages = buildMessages(makeRequest({ count: 3 }));
-
-    expect(messages.map((message) => message.role)).toEqual(['system', 'user']);
-    const userPrompt = messages[1].content;
-    expect(userPrompt).toContain('w_abandon');
-    expect(userPrompt).toContain('abandon');
-    expect(userPrompt).toContain('放弃；抛弃');
-    expect(userPrompt).toContain('"wrongCount": 3');
-    expect(userPrompt).toContain('"lastExerciseType": "choice"');
-    expect(userPrompt).toContain('"recentAccuracy": 0.3');
-    expect(userPrompt).toContain('adaptive');
-    expect(userPrompt).toContain('"exercises"');
-    expect(userPrompt).toContain('3 道');
-  });
-
-  it('难度档位影响提示词内容', () => {
-    expect(buildMessages(makeRequest({ difficulty: 'foundation' }))[1].content).toContain('foundation');
-    expect(buildMessages(makeRequest({ difficulty: 'challenge' }))[1].content).toContain('challenge');
-  });
-});
-
-/* ------------------------------------------------------------------ */
-/* JSON 提取容错                                                       */
-/* ------------------------------------------------------------------ */
-
-describe('extractJsonCandidate', () => {
-  it('去掉 markdown 代码围栏', () => {
-    expect(extractJsonCandidate('```json\n{"a":1}\n```')).toBe('{"a":1}');
-    expect(extractJsonCandidate('```\n{"a":1}\n```')).toBe('{"a":1}');
-  });
-
-  it('截取夹在解释文字中的 JSON 对象', () => {
-    expect(extractJsonCandidate('好的，结果如下：{"a":1} 希望对你有帮助')).toBe('{"a":1}');
-  });
-
-  it('没有 JSON 时返回 null', () => {
-    expect(extractJsonCandidate('抱歉，我无法完成。')).toBeNull();
-    expect(extractJsonCandidate('')).toBeNull();
-  });
-});
-
-/* ------------------------------------------------------------------ */
-/* parseExercises：严格校验                                            */
-/* ------------------------------------------------------------------ */
-
-describe('parseExercises', () => {
-  const singleTargetRequest = () => ({ targets: [makeTarget()], count: 5 });
-
-  it('解析代码围栏 JSON，并生成合法 Exercise', () => {
-    const raw = `\`\`\`json\n${payloadOf(choiceItem(), fillItem())}\n\`\`\``;
-
-    const result = parseExercises(raw, singleTargetRequest());
-
-    expect(result).toHaveLength(2);
-    const [choice, fill] = result;
-
-    expect(choice.type).toBe('choice');
-    expect(choice.source).toBe('llm');
-    expect(choice.id).toMatch(/^ex_/);
-    expect(choice.wordId).toBe('w_abandon');
-    expect(choice.options).toHaveLength(4);
-    expect(choice.options).toContain(choice.answer);
-    expect(choice.answer).toBe('放弃；抛弃');
-    expect(choice.difficulty).toBe(3);
-
-    expect(fill.type).toBe('fill');
-    expect(fill.options).toBeUndefined();
-    expect(fill.answer).toBe('abandon');
-    expect(fill.acceptableAnswers).toEqual(['abandon', 'abandoned', 'give up']);
-  });
-
-  it('丢弃所有不合法的题目，只保留合法题', () => {
-    const items = [
-      choiceItem(),
-      choiceItem({ wordId: 'w_unknown' }),
-      choiceItem({ type: 'essay' }),
-      choiceItem({ prompt: '重复选项题', options: ['放弃', '放弃', '建造'] }),
-      choiceItem({ prompt: '只有两个选项', options: ['放弃', '建造'] }),
-      choiceItem({ prompt: '答案不在选项', options: ['建造', '灌溉', '测量'], answer: '放弃' }),
-      choiceItem({ prompt: '空解析题', explanation: '   ' }),
-      choiceItem({ prompt: '' }),
-      choiceItem({ prompt: 'x'.repeat(501) }),
-      fillItem({ prompt: '没有空格的题干' }),
-      fillItem({ prompt: '空答案 ____', answer: '   ' }),
-      null,
-      'not-an-object',
-      42,
-    ];
-
-    const result = parseExercises(payloadOf(...items), singleTargetRequest());
-
-    expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('choice');
-    expect(result[0].prompt).toBe('「abandon」最接近的意思是？');
-  });
-
-  it('答案按归一化匹配修正为选项原文，并容忍序号前缀', () => {
-    const normalizedItem = choiceItem({
-      prompt: '归一化修正题',
-      options: ['Abandon', 'Build', 'Irrigate', 'Measure'],
-      answer: 'abandon',
-    });
-    const numberedItem = choiceItem({
-      prompt: '序号前缀题',
-      options: ['放弃；抛弃', '建造', '灌溉'],
-      answer: 'A. 放弃；抛弃',
-    });
-
-    const result = parseExercises(payloadOf(normalizedItem, numberedItem), {
-      targets: [makeTarget()],
-      count: 5,
-    });
-
-    expect(result).toHaveLength(2);
-    expect(result[0].answer).toBe('Abandon');
-    expect(result[0].options).toContain('Abandon');
-    expect(result[1].answer).toBe('放弃；抛弃');
-  });
-
-  it('选择题选项会被打乱，正确答案仍在选项中', () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    const item = choiceItem({
-      options: ['放弃；抛弃', '建造', '灌溉', '测量'],
-      answer: '放弃；抛弃',
-    });
-
-    const [exercise] = parseExercises(payloadOf(item), { targets: [makeTarget()], count: 1 });
-
-    expect(exercise.options).toEqual(expect.arrayContaining(['放弃；抛弃', '建造', '灌溉', '测量']));
-    expect(exercise.options).not.toEqual(['放弃；抛弃', '建造', '灌溉', '测量']);
-    expect(exercise.options).toContain(exercise.answer);
-  });
-
-  it('fill 支持全角下划线，并合并去重 acceptableAnswers', () => {
-    const item = fillItem({
-      prompt: '他决定＿＿这个计划。',
-      answer: '放弃',
-      acceptableAnswers: ['放棄', '放弃', '   ', 'give up'],
-    });
-
-    const [exercise] = parseExercises(payloadOf(item), { targets: [makeTarget()], count: 1 });
-
-    expect(exercise.type).toBe('fill');
-    expect(exercise.acceptableAnswers).toEqual(['放弃', '放棄', 'give up']);
-  });
-
-  it('difficulty clamp 到 1~5，非法值回落为 3', () => {
-    const targets = ['w1', 'w2', 'w3', 'w4', 'w5'].map((id) => targetFor(id));
-    const items = [
-      choiceItem({ wordId: 'w1', prompt: '题一', difficulty: 9 }),
-      choiceItem({ wordId: 'w2', prompt: '题二', difficulty: -2 }),
-      choiceItem({ wordId: 'w3', prompt: '题三', difficulty: '4' }),
-      choiceItem({ wordId: 'w4', prompt: '题四', difficulty: 'abc' }),
-      choiceItem({ wordId: 'w5', prompt: '题五', difficulty: undefined }),
-    ];
-
-    const result = parseExercises(payloadOf(...items), { targets, count: 5 });
-
-    expect(result.map((exercise) => exercise.difficulty)).toEqual([5, 1, 4, 3, 3]);
-  });
-
-  it('超长 explanation 截断到 400 字以内', () => {
-    const item = choiceItem({ explanation: '中'.repeat(450) });
-
-    const [exercise] = parseExercises(payloadOf(item), { targets: [makeTarget()], count: 1 });
-
-    expect(exercise.explanation.length).toBe(400);
-    expect(exercise.explanation.endsWith('…')).toBe(true);
-  });
-
-  it('按 wordId + type + 归一化 prompt 去重', () => {
-    const items = [
-      choiceItem({ prompt: '「abandon」最接近的意思是？' }),
-      choiceItem({ prompt: '「abandon」最接近的意思是？', options: ['甲', '乙', '丙'], answer: '甲' }),
-    ];
-
-    const result = parseExercises(payloadOf(...items), { targets: [makeTarget()], count: 5 });
-
-    expect(result).toHaveLength(1);
-  });
-
-  it('每个词最多保留 2 道题', () => {
-    const items = [
-      choiceItem({ prompt: '题A' }),
-      choiceItem({ prompt: '题B' }),
-      choiceItem({ prompt: '题C' }),
-    ];
-
-    const result = parseExercises(payloadOf(...items), { targets: [makeTarget()], count: 5 });
-
-    expect(result).toHaveLength(2);
-    expect(result.map((exercise) => exercise.prompt)).toEqual(['题A', '题B']);
-  });
-
-  it('最多截取 count 道题', () => {
-    const targets = ['w1', 'w2', 'w3'].map((id) => targetFor(id));
-    const items = [
-      choiceItem({ wordId: 'w1', prompt: '题一' }),
-      choiceItem({ wordId: 'w2', prompt: '题二' }),
-      choiceItem({ wordId: 'w3', prompt: '题三' }),
-    ];
-
-    const result = parseExercises(payloadOf(...items), { targets, count: 2 });
-
-    expect(result).toHaveLength(2);
-    expect(result.map((exercise) => exercise.wordId)).toEqual(['w1', 'w2']);
-  });
-
-  it('根节点直接是数组时也能容错', () => {
-    const result = parseExercises(JSON.stringify([choiceItem()]), singleTargetRequest());
-    expect(result).toHaveLength(1);
-  });
-
-  it('没有 JSON 时抛 parse', () => {
-    const error = syncLLMError(() => parseExercises('抱歉，我无法完成。', singleTargetRequest()));
-    expect(error.code).toBe('parse');
-  });
-
-  it('缺少 exercises 数组时抛 parse', () => {
-    const error = syncLLMError(() => parseExercises('{"foo":[]}', singleTargetRequest()));
-    expect(error.code).toBe('parse');
-  });
-
-  it('exercises 为空数组时抛 empty', () => {
-    const error = syncLLMError(() => parseExercises(payloadOf(), singleTargetRequest()));
-    expect(error.code).toBe('empty');
-  });
-
-  it('题目全部不合法时抛 parse', () => {
-    const error = syncLLMError(() =>
-      parseExercises(payloadOf(choiceItem({ wordId: 'w_unknown' })), singleTargetRequest()),
-    );
-    expect(error.code).toBe('parse');
-  });
-});
-
-/* ------------------------------------------------------------------ */
-/* generateExercises：编排                                             */
-/* ------------------------------------------------------------------ */
-
-describe('generateExercises', () => {
-  it('走完整流程：进度回调 + JSON 模式请求（经代理）+ 校验后的题目', async () => {
-    fetchMock.mockResolvedValue(completionWithExercises([choiceItem(), fillItem()]));
-    const progress: string[] = [];
-
-    const result = await generateExercises(
-      makeRequest({ count: 2, onProgress: (stage) => progress.push(stage) }),
-    );
-
-    expect(progress).toEqual(['正在整理错词…', '正在校验题目…']);
-    expect(result).toHaveLength(2);
-    expect(result.every((exercise) => exercise.source === 'llm')).toBe(true);
-
-    const call = lastProxyCall();
-    expect(call.path).toBe(PROXY_PATH);
-    expect(call.payload.url).toBe('https://api.deepseek.com/v1/chat/completions');
-    expect(call.upstreamBody.response_format).toEqual({ type: 'json_object' });
-    const sentMessages = call.upstreamBody.messages as Array<{ role: string; content: string }>;
-    expect(sentMessages).toHaveLength(2);
-    expect(sentMessages[0].role).toBe('system');
-    expect(sentMessages[1].content).toContain('w_abandon');
-  });
-
-  it('最多返回 count 道题', async () => {
-    const targets = ['w1', 'w2', 'w3'].map((id) => targetFor(id));
-    fetchMock.mockResolvedValue(
-      completionWithExercises([
-        choiceItem({ wordId: 'w1', prompt: '题一' }),
-        choiceItem({ wordId: 'w2', prompt: '题二' }),
-        choiceItem({ wordId: 'w3', prompt: '题三' }),
-      ]),
-    );
-
-    const result = await generateExercises(makeRequest({ targets, count: 2 }));
-
-    expect(result).toHaveLength(2);
-  });
-
-  it('模型返回空内容时抛 empty', async () => {
-    fetchMock.mockResolvedValue(openAICompletion('   '));
-
-    const error = await asyncLLMError(() => generateExercises(makeRequest()));
-
-    expect(error.code).toBe('empty');
-  });
-
-  it('模型返回非法 JSON 时抛 parse', async () => {
-    fetchMock.mockResolvedValue(openAICompletion('这不是 JSON'));
-
-    const error = await asyncLLMError(() => generateExercises(makeRequest()));
-
-    expect(error.code).toBe('parse');
-  });
-
-  it('接口 401 时向上抛 auth', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ error: { message: 'invalid key' } }, 401));
-
-    const error = await asyncLLMError(() => generateExercises(makeRequest()));
-
-    expect(error.code).toBe('auth');
-  });
-
-  it('配置缺失时抛 config 且不发请求', async () => {
-    const error = await asyncLLMError(() =>
-      generateExercises(makeRequest({ settings: makeSettings({ baseUrl: '' }) })),
-    );
-
-    expect(error.code).toBe('config');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('没有错词时抛 empty', async () => {
-    const error = await asyncLLMError(() => generateExercises(makeRequest({ targets: [] })));
-    expect(error.code).toBe('empty');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('传入已取消的 signal 时直接抛 aborted 且不发请求', async () => {
-    const controller = new AbortController();
-    controller.abort();
-
-    const error = await asyncLLMError(() =>
-      generateExercises(makeRequest({ signal: controller.signal })),
-    );
-
-    expect(error.code).toBe('aborted');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('请求过程中取消时抛 aborted', async () => {
-    fetchMock.mockImplementation(pendingOnAbort());
-    const controller = new AbortController();
-
-    const promise = asyncLLMError(() =>
-      generateExercises(makeRequest({ signal: controller.signal })),
-    );
-    setTimeout(() => controller.abort(), 5);
-
-    const error = await promise;
-    expect(error.code).toBe('aborted');
-  });
-});
-
-/* ------------------------------------------------------------------ */
 /* barrel 导出契约                                                     */
 /* ------------------------------------------------------------------ */
 
 describe('LLM 层 barrel 导出契约', () => {
-  it('保持 5 个函数 / PROMPT_VERSION / LLMError 导出', () => {
+  it('保持传输层与 FEEDBACK_PROMPT_VERSION / LLMError 导出', () => {
     expect(typeof llmEntry.hasUsableLLMConfig).toBe('function');
     expect(typeof llmEntry.testLLMConnection).toBe('function');
     expect(typeof llmEntry.chatComplete).toBe('function');
     expect(typeof llmEntry.streamChat).toBe('function');
     expect(typeof llmEntry.fetchModels).toBe('function');
-    expect(typeof llmEntry.generateExercises).toBe('function');
-    expect(typeof llmEntry.PROMPT_VERSION).toBe('string');
+    expect(typeof llmEntry.resolveActiveLLMSettings).toBe('function');
+    expect(typeof llmEntry.FEEDBACK_PROMPT_VERSION).toBe('string');
     expect(typeof llmEntry.LLMError).toBe('function');
   });
 });

@@ -1,14 +1,8 @@
 /**
- * localStorage 持久化层（数据版本 v2）。
- *
- * - 首次打开：用内置词库生成初始数据（示例词库 + 1 份默认 provider + 默认练习设置）；
- * - 读取时做完整的字段清洗与兜底；旧版 v1 数据会自动迁移到 v2；
- * - 损坏的 v2 数据会备份到 `deepword:data:v2:corrupt:<ts>` 后降级重建；
- * - 导入/导出使用带元信息的 JSON；默认导出不含 API Key；
- * - 所有写入都可能因配额失败，调用方需处理 { ok: false }。
+ * localStorage 持久化层（数据版本 v3，无旧版迁移）。
  */
 
-import { SEED_WORDS } from '../data/wordbank';
+import { SEED_WORDS } from '@/data/wordbanks';
 import {
   DATA_VERSION,
   DEFAULT_PRACTICE_SETTINGS,
@@ -17,10 +11,7 @@ import {
   type AppData,
   type Attempt,
   type DailyStat,
-  type Exercise,
-  type ExerciseType,
   type LearningStats,
-  type LegacyLLMSettings,
   type MasteryRecord,
   type Mistake,
   type PracticeResult,
@@ -28,45 +19,27 @@ import {
   type PracticeSettings,
   type ProviderKind,
   type ProviderProfile,
+  type Question,
   type Skill,
-  type SrsCard,
-  type SrsStatus,
   type ThinkingMode,
   type TranslationVerdict,
   type TtsSettings,
   type Vendor,
   type Word,
   type WordInput,
-} from '../types';
-import {
-  VENDOR_OPTIONS,
-  createInitialProviders,
-  inferVendorFromBaseUrl,
-  legacySettingsToProfile,
-} from './providerModel';
-import { createCard } from './srs';
-import { pruneDaily } from './stats';
-import { clamp, uid } from './utils';
+} from '@/domain/types';
+import { VENDOR_OPTIONS, inferVendorFromBaseUrl } from '@/infra/llm/providerModel';
+import { pruneDaily } from '@/domain/stats';
+import { clamp, uid } from '@/domain/utils';
 
-/** v2 数据键。 */
-export const STORAGE_KEY = 'deepword:data:v2';
-/** v1 旧数据键；迁移后保留，不清除。 */
-export const LEGACY_STORAGE_KEY = 'deepword:data:v1';
+export const STORAGE_KEY = 'deepword:data:v3';
+
+/** 旧版数据键；读取 v3 缺失或版本不对时一并清除。 */
+export const LEGACY_STORAGE_KEYS = ['deepword:data', 'deepword:data:v1', 'deepword:data:v2'] as const;
 
 export const MAX_WORDS = 10_000;
 export const MAX_ATTEMPTS = 3_000;
 
-const SRS_STATUSES: SrsStatus[] = ['new', 'learning', 'review', 'mastered'];
-const ATTEMPT_GRADES = ['again', 'hard', 'good', 'easy'] as const;
-const EXERCISE_TYPES: ExerciseType[] = [
-  'choice',
-  'fill',
-  'spell',
-  'translate',
-  'sentence',
-  'usage',
-  'correction',
-];
 const SKILLS: Skill[] = ['en2zh', 'zh2en', 'spell', 'listen', 'sentence', 'translate'];
 const VERDICTS: TranslationVerdict[] = ['perfect', 'good', 'poor'];
 const AI_STATUSES = ['ok', 'failed', 'local-fallback'] as const;
@@ -163,19 +136,20 @@ export function makeWord(input: WordInput, options: { id?: string; now?: number 
   };
 }
 
-/** 新建单词输入清洗结果；无效时返回 null。 */
 export function normalizeWord(input: WordInput): WordInput | null {
   return normalizeWordInput(input);
+}
+
+function createDefaultProviders(): ProviderProfile[] {
+  return [];
 }
 
 /* ------------------------------------------------------------------ */
 /* 初始数据                                                             */
 /* ------------------------------------------------------------------ */
 
-/** 首次使用的初始数据：内置词库 + 1 份默认 provider + 默认练习设置。 */
 export function createInitialData(now = Date.now()): AppData {
   const words: Word[] = [];
-  const srs: Record<string, SrsCard> = {};
   const seen = new Set<string>();
 
   for (const seed of SEED_WORDS) {
@@ -186,7 +160,7 @@ export function createInitialData(now = Date.now()): AppData {
     seen.add(dedupeKey);
     let id = seedWordId(normalized.term);
     while (words.some((word) => word.id === id)) id = uid('w');
-    const word: Word = {
+    words.push({
       id,
       term: normalized.term,
       meaning: normalized.meaning,
@@ -196,26 +170,20 @@ export function createInitialData(now = Date.now()): AppData {
       exampleTranslation: normalized.exampleTranslation,
       tags: normalized.tags ?? [],
       createdAt: now,
-    };
-    words.push(word);
-    srs[id] = createCard(id, now);
+    });
     if (words.length >= MAX_WORDS) break;
   }
-
-  const providers = createInitialProviders(now);
 
   return {
     version: DATA_VERSION,
     words,
-    srs,
-    attempts: [],
-    mistakes: {},
-    providers,
-    activeProviderId: providers[0]?.id ?? null,
+    providers: createDefaultProviders(),
+    activeProviderId: null,
     practice: defaultPracticeSettings(),
     session: null,
     mastery: {},
-    reviewPriority: {},
+    attempts: [],
+    mistakes: {},
     theme: 'light',
     stats: { daily: {} },
     createdAt: now,
@@ -227,7 +195,6 @@ export function createInitialData(now = Date.now()): AppData {
 /* provider 清洗                                                        */
 /* ------------------------------------------------------------------ */
 
-/** 单份 provider 清洗；Base URL 为空的配置直接丢弃。 */
 function sanitizeProvider(raw: unknown, now: number): ProviderProfile | null {
   if (!raw || typeof raw !== 'object') return null;
   const source = raw as Partial<ProviderProfile>;
@@ -265,7 +232,6 @@ function sanitizeProvider(raw: unknown, now: number): ProviderProfile | null {
   };
 }
 
-/** provider 列表清洗：丢弃非法条目、按 id 去重、截断到 MAX_PROVIDERS。 */
 function sanitizeProviders(raw: unknown, now: number): ProviderProfile[] {
   if (!Array.isArray(raw)) return [];
   const providers: ProviderProfile[] = [];
@@ -281,7 +247,6 @@ function sanitizeProviders(raw: unknown, now: number): ProviderProfile[] {
   return providers;
 }
 
-/** activeProviderId 必须存在，否则回退首条；列表为空则 null。 */
 function sanitizeActiveProviderId(raw: unknown, providers: ProviderProfile[]): string | null {
   if (typeof raw === 'string' && raw && providers.some((item) => item.id === raw)) return raw;
   return providers[0]?.id ?? null;
@@ -308,14 +273,12 @@ function sanitizePractice(raw: unknown): PracticeSettings {
     1,
     12,
   );
-  // 复习题量必须落在 [词数, 2×词数] 区间内。
   const reviewQuestionsPerRound = clampInt(
     source.reviewQuestionsPerRound,
     defaults.reviewQuestionsPerRound,
     reviewWordsPerRound,
     reviewWordsPerRound * 2,
   );
-  // 自动跳转：0 = 手动；其余限制在 1000~10000 ms。
   const advanceSource = cleanNumber(source.feedbackAutoAdvanceMs);
   const feedbackAutoAdvanceMs =
     advanceSource === undefined
@@ -358,20 +321,18 @@ function sanitizeIdList(raw: unknown): string[] {
   return result;
 }
 
-/** 对外暴露的练习设置清洗：状态层更新设置时复用同一套口径。 */
 export function normalizePracticeSettings(raw: unknown): PracticeSettings {
   return sanitizePractice(raw);
 }
 
 const MAX_OPTION_COUNT = 4;
 
-/** 会话内的题目清洗（宽松：字段不合法则丢弃整题，交给 UI 重新生成）。 */
-function sanitizeSessionQuestion(raw: unknown): Exercise | null {
+function sanitizeSessionQuestion(raw: unknown): Question | null {
   if (!raw || typeof raw !== 'object') return null;
-  const source = raw as Partial<Exercise>;
+  const source = raw as Partial<Question>;
   const wordId = cleanString(source.wordId);
   if (!wordId) return null;
-  if (!EXERCISE_TYPES.includes(source.type as ExerciseType)) return null;
+  if (!SKILLS.includes(source.skill as Skill)) return null;
   const prompt = cleanString(source.prompt).slice(0, 500);
   if (!prompt) return null;
   const answer = cleanString(source.answer).slice(0, 500);
@@ -390,15 +351,13 @@ function sanitizeSessionQuestion(raw: unknown): Exercise | null {
   return {
     id: cleanString(source.id, uid('ex')).slice(0, 80),
     wordId,
-    type: source.type as ExerciseType,
+    skill: source.skill as Skill,
     prompt,
     options: options.length > 0 ? options : undefined,
     answer,
     acceptableAnswers: acceptableAnswers.length > 0 ? acceptableAnswers : undefined,
     explanation: cleanString(source.explanation).slice(0, 400),
     difficulty: clampInt(source.difficulty, 3, 1, 5),
-    source: 'local',
-    skill: SKILLS.includes(source.skill as Skill) ? (source.skill as Skill) : undefined,
     audio: source.audio === true ? true : undefined,
     direction:
       source.direction === 'en2zh' || source.direction === 'zh2en'
@@ -407,7 +366,6 @@ function sanitizeSessionQuestion(raw: unknown): Exercise | null {
   };
 }
 
-/** 会话内的单题作答结果清洗。 */
 function sanitizePracticeResult(raw: unknown): PracticeResult | null {
   if (!raw || typeof raw !== 'object') return null;
   const source = raw as Partial<PracticeResult>;
@@ -422,9 +380,6 @@ function sanitizePracticeResult(raw: unknown): PracticeResult | null {
     questionId: cleanString(source.questionId, uid('ex')).slice(0, 80),
     wordId,
     skill: source.skill as Skill,
-    exerciseType: EXERCISE_TYPES.includes(source.exerciseType as ExerciseType)
-      ? (source.exerciseType as ExerciseType)
-      : 'choice',
     prompt,
     response,
     answer,
@@ -464,18 +419,16 @@ function sanitizeSession(raw: unknown, now: number): PracticeSessionState | null
     targetQuestions,
   };
 
-  // Phase B 可选字段：仅当来源里出现时才写回，保持旧结构（旧备份/旧测试）原样。
   if ('roundNo' in source) {
     const roundNo = cleanNumber(source.roundNo);
     if (roundNo !== undefined) session.roundNo = Math.max(1, Math.round(roundNo));
   }
   if ('gate' in source) {
-    session.gate =
-      source.gate === 'ask' || source.gate === 'confirm' ? source.gate : null;
+    session.gate = source.gate === 'ask' || source.gate === 'confirm' ? source.gate : null;
   }
   if ('currentWordId' in source) {
-    const wordId = cleanString(source.currentWordId).slice(0, 80);
-    if (wordId) session.currentWordId = wordId;
+    const wId = cleanString(source.currentWordId).slice(0, 80);
+    if (wId) session.currentWordId = wId;
   }
   if ('questionIndex' in source) {
     const index = cleanNumber(source.questionIndex);
@@ -484,7 +437,7 @@ function sanitizeSession(raw: unknown, now: number): PracticeSessionState | null
   if ('questions' in source && Array.isArray(source.questions)) {
     session.questions = source.questions
       .map((item) => sanitizeSessionQuestion(item))
-      .filter((item): item is Exercise => item !== null)
+      .filter((item): item is Question => item !== null)
       .slice(0, 64);
   }
   if ('results' in source && Array.isArray(source.results)) {
@@ -496,7 +449,6 @@ function sanitizeSession(raw: unknown, now: number): PracticeSessionState | null
   return session;
 }
 
-/** 掌握标记清洗：id 必须存在于词库（调用方按 wordIds 过滤）。 */
 function sanitizeMastery(raw: unknown, now: number): Record<string, MasteryRecord> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   const result: Record<string, MasteryRecord> = {};
@@ -512,60 +464,6 @@ function sanitizeMastery(raw: unknown, now: number): Record<string, MasteryRecor
     };
   }
   return result;
-}
-
-/** 闪卡「不认识」优先级清洗（值 = 标记时间戳）。 */
-function sanitizeReviewPriority(raw: unknown, _now: number): Record<string, number> {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  const result: Record<string, number> = {};
-  for (const [wordId, value] of Object.entries(raw as Record<string, unknown>)) {
-    const ts = cleanNumber(value);
-    if (ts === undefined) continue;
-    result[wordId] = Math.max(0, Math.round(ts));
-  }
-  return result;
-}
-
-
-/* ------------------------------------------------------------------ */
-/* 卡片 / 单词 / 作答 / 错题 / 统计清洗                                  */
-/* ------------------------------------------------------------------ */
-
-function sanitizeCard(raw: unknown, wordId: string, now: number): SrsCard {
-  const source = (raw ?? {}) as Partial<SrsCard>;
-  const fallback = createCard(wordId, now);
-  const status = SRS_STATUSES.includes(source.status as SrsStatus)
-    ? (source.status as SrsStatus)
-    : fallback.status;
-  const interval =
-    typeof source.interval === 'number' && Number.isFinite(source.interval)
-      ? clamp(source.interval, 0, 3650)
-      : 0;
-  return {
-    wordId,
-    status,
-    ease:
-      typeof source.ease === 'number' && Number.isFinite(source.ease)
-        ? clamp(source.ease, 1.3, 3)
-        : fallback.ease,
-    interval,
-    dueAt:
-      typeof source.dueAt === 'number' && Number.isFinite(source.dueAt)
-        ? source.dueAt
-        : fallback.dueAt,
-    reps:
-      typeof source.reps === 'number' && Number.isFinite(source.reps)
-        ? Math.max(0, Math.round(source.reps))
-        : 0,
-    lapses:
-      typeof source.lapses === 'number' && Number.isFinite(source.lapses)
-        ? Math.max(0, Math.round(source.lapses))
-        : 0,
-    lastReviewedAt:
-      typeof source.lastReviewedAt === 'number' && Number.isFinite(source.lastReviewedAt)
-        ? source.lastReviewedAt
-        : undefined,
-  };
 }
 
 function sanitizeWord(raw: unknown, now: number): Word | null {
@@ -593,29 +491,19 @@ function sanitizeWord(raw: unknown, now: number): Word | null {
 function sanitizeAttempt(raw: unknown, now: number): Attempt | null {
   if (!raw || typeof raw !== 'object') return null;
   const source = raw as Partial<Attempt>;
-  if (typeof source.wordId !== 'string' || !source.wordId) return null;
-  const kind = source.kind === 'exercise' ? 'exercise' : 'flashcard';
-  const grade = ATTEMPT_GRADES.includes(source.grade as (typeof ATTEMPT_GRADES)[number])
-    ? source.grade
-    : undefined;
+  const wordId = cleanString(source.wordId);
+  if (!wordId) return null;
+  if (!SKILLS.includes(source.skill as Skill)) return null;
   const latency = cleanNumber(source.latencyMs);
-  const aiFeedback = cleanOptionalString(source.aiFeedback)?.slice(0, 400);
-  const aiImprovement = cleanOptionalString(source.aiImprovement)?.slice(0, 400);
   return {
     id: cleanString(source.id, uid('a')),
-    wordId: source.wordId,
-    kind,
-    grade: kind === 'flashcard' ? grade : undefined,
+    wordId,
+    skill: source.skill as Skill,
     correct: Boolean(source.correct),
-    exerciseType: EXERCISE_TYPES.includes(source.exerciseType as ExerciseType)
-      ? source.exerciseType
-      : undefined,
-    source: source.source === 'llm' || source.source === 'local' ? source.source : undefined,
-    skill: SKILLS.includes(source.skill as Skill) ? source.skill : undefined,
     latencyMs: latency === undefined ? undefined : Math.round(clamp(latency, 0, 86_400_000)),
     verdict: VERDICTS.includes(source.verdict as TranslationVerdict) ? source.verdict : undefined,
-    aiFeedback,
-    aiImprovement,
+    aiFeedback: cleanOptionalString(source.aiFeedback)?.slice(0, 400),
+    aiImprovement: cleanOptionalString(source.aiImprovement)?.slice(0, 400),
     aiStatus: (AI_STATUSES as readonly string[]).includes(source.aiStatus as string)
       ? source.aiStatus
       : undefined,
@@ -655,9 +543,7 @@ function sanitizeMistake(raw: unknown, wordId: string): Mistake | null {
       typeof source.lastAttemptAt === 'number' && Number.isFinite(source.lastAttemptAt)
         ? source.lastAttemptAt
         : now,
-    lastExerciseType: EXERCISE_TYPES.includes(source.lastExerciseType as ExerciseType)
-      ? source.lastExerciseType
-      : undefined,
+    lastSkill: SKILLS.includes(source.lastSkill as Skill) ? source.lastSkill : undefined,
     lastPrompt: cleanOptionalString(source.lastPrompt)?.slice(0, 300),
   };
 }
@@ -679,65 +565,10 @@ function sanitizeStats(raw: unknown, now: number): LearningStats {
   return pruneDaily({ daily }, 400, now);
 }
 
-/** 旧数据判定：显式 version 1，或「没有 providers 却带着旧 settings」。 */
-function looksLegacy(source: Record<string, unknown>): boolean {
-  const hasProviders = Array.isArray(source.providers) && source.providers.length > 0;
-  const hasLegacySettings =
-    source.settings !== undefined &&
-    source.settings !== null &&
-    typeof source.settings === 'object';
-  return source.version === 1 || (!hasProviders && hasLegacySettings);
-}
-
-/**
- * v1 → v2 结构迁移（纯函数，不修改入参）。
- *
- * 只负责字段映射与补默认值；所有字段的类型/范围清洗仍由 `hydrateData` 完成。
- */
-export function migrateV1ToV2(raw: unknown, now = Date.now()): AppData {
-  const source = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-
-  let providers: ProviderProfile[];
-  if (Array.isArray(source.providers) && source.providers.length > 0) {
-    providers = source.providers as ProviderProfile[];
-  } else if (
-    source.settings &&
-    typeof source.settings === 'object' &&
-    !Array.isArray(source.settings)
-  ) {
-    providers = [legacySettingsToProfile(source.settings as LegacyLLMSettings, now)];
-  } else {
-    providers = [];
-  }
-
-  const activeProviderId =
-    typeof source.activeProviderId === 'string'
-      ? source.activeProviderId
-      : (providers[0]?.id ?? null);
-
-  const migrated: Record<string, unknown> = { ...source };
-  delete migrated.settings;
-  return {
-    ...migrated,
-    version: DATA_VERSION,
-    providers,
-    activeProviderId,
-    practice: source.practice ?? defaultPracticeSettings(),
-    session: (source.session as PracticeSessionState | null | undefined) ?? null,
-    mastery: (source.mastery as Record<string, MasteryRecord> | undefined) ?? {},
-    reviewPriority: (source.reviewPriority as Record<string, number> | undefined) ?? {},
-  } as AppData;
-}
-
 /* ------------------------------------------------------------------ */
 /* 读取清洗                                                             */
 /* ------------------------------------------------------------------ */
 
-/**
- * 把任意来源的对象清洗成 AppData（v2）。用于读取 localStorage 与导入备份。
- * - v1 数据（version===1 或「无 providers 但有 settings」）自动迁移；
- * - 结构性错误（例如 words 类型错误）会抛错，方便导入时提示用户 / 走损坏恢复。
- */
 export function hydrateData(
   raw: unknown,
   options: { now?: number; requireWords?: boolean } = {},
@@ -746,14 +577,12 @@ export function hydrateData(
   if (!raw || typeof raw !== 'object') throw new Error('数据格式不正确');
   const source = raw as Record<string, unknown>;
 
-  // 结构存在但类型错误（例如 words: "oops"）说明数据已损坏，必须走损坏恢复流程，
-  // 不能静默重置，否则用户会在不知情时丢掉现有进度。
-  if (source.words !== undefined && !Array.isArray(source.words)) {
-    throw new Error('单词列表格式不正确');
+  if (source.version !== DATA_VERSION) {
+    throw new Error('仅支持数据版本 3');
   }
 
-  if (looksLegacy(source)) {
-    return hydrateData(migrateV1ToV2(source, now), { now, requireWords: options.requireWords });
+  if (source.words !== undefined && !Array.isArray(source.words)) {
+    throw new Error('单词列表格式不正确');
   }
 
   const rawWords = Array.isArray(source.words) ? (source.words as unknown[]) : null;
@@ -773,12 +602,6 @@ export function hydrateData(
     seenTerms.add(key);
     seenIds.add(word.id);
     words.push(word);
-  }
-
-  const srs: Record<string, SrsCard> = {};
-  const rawSrs = source.srs as Record<string, unknown> | undefined;
-  for (const word of words) {
-    srs[word.id] = sanitizeCard(rawSrs?.[word.id], word.id, now);
   }
 
   const wordIds = new Set(words.map((word) => word.id));
@@ -812,18 +635,9 @@ export function hydrateData(
     }
   }
 
-  const reviewPriority: Record<string, number> = {};
-  if (source.reviewPriority && typeof source.reviewPriority === 'object') {
-    for (const [wordId, at] of Object.entries(sanitizeReviewPriority(source.reviewPriority, now))) {
-      if (!wordIds.has(wordId)) continue;
-      reviewPriority[wordId] = at;
-    }
-  }
-
   return {
     version: DATA_VERSION,
     words,
-    srs,
     attempts: attempts.slice(0, MAX_ATTEMPTS),
     mistakes,
     providers,
@@ -831,7 +645,6 @@ export function hydrateData(
     practice: sanitizePractice(source.practice),
     session: sanitizeSession(source.session, now),
     mastery,
-    reviewPriority,
     theme: source.theme === 'dark' ? 'dark' : 'light',
     stats: sanitizeStats(source.stats, now),
     createdAt: timestamp(source.createdAt, now),
@@ -856,17 +669,55 @@ function backupCorrupt(storageKey: string, raw: string): void {
   }
 }
 
-/** 从 localStorage 读取数据；优先 v2，缺失时迁移 v1；v2 损坏时备份并降级。 */
+export function wipeLegacyStorageKeys(): void {
+  if (!storageAvailable()) return;
+  for (const key of LEGACY_STORAGE_KEYS) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function removeV3Key(): void {
+  if (!storageAvailable()) return;
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function reseedStorage(now: number): AppData {
+  wipeLegacyStorageKeys();
+  removeV3Key();
+  const data = createInitialData(now);
+  saveData(data);
+  return data;
+}
+
 export function loadData(now = Date.now()): LoadResult {
   const initial = createInitialData(now);
   if (!storageAvailable()) {
     return { data: initial, warning: '当前浏览器无法使用 localStorage，学习进度将无法保存。' };
   }
 
-  const rawV2 = window.localStorage.getItem(STORAGE_KEY);
-  if (rawV2) {
+  const rawV3 = window.localStorage.getItem(STORAGE_KEY);
+  if (rawV3) {
     try {
-      const parsed = JSON.parse(rawV2) as unknown;
+      const parsed = JSON.parse(rawV3) as unknown;
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        (parsed as Record<string, unknown>).version !== DATA_VERSION
+      ) {
+        const data = reseedStorage(now);
+        return {
+          data,
+          warning: '本地数据版本不匹配，已载入示例词库。',
+        };
+      }
       const data = hydrateData(parsed, { now });
       if (data.words.length === 0) {
         return {
@@ -876,49 +727,26 @@ export function loadData(now = Date.now()): LoadResult {
       }
       return { data };
     } catch (error) {
-      backupCorrupt(STORAGE_KEY, rawV2);
+      backupCorrupt(STORAGE_KEY, rawV3);
+      const data = reseedStorage(now);
       return {
-        data: initial,
+        data,
         warning: `本地数据读取失败（${error instanceof Error ? error.message : '未知错误'}），已载入示例词库，原数据已尝试备份。`,
       };
     }
   }
 
-  const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-  if (legacyRaw) {
-    try {
-      const parsed = JSON.parse(legacyRaw) as unknown;
-      const data = hydrateData(parsed, { now });
-      // 迁移成功后立即写入 v2；v1 键保留，便于降级排查。
-      try {
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      } catch {
-        /* 写满配额时仍返回内存中的迁移结果 */
-      }
-      if (data.words.length === 0) {
-        return {
-          data,
-          warning: '词库为空，可在「词库」页添加单词或重新载入示例词库。',
-        };
-      }
-      return { data };
-    } catch (error) {
-      backupCorrupt(LEGACY_STORAGE_KEY, legacyRaw);
-      return {
-        data: initial,
-        warning: `本地数据读取失败（${error instanceof Error ? error.message : '未知错误'}），已载入示例词库，原数据已尝试备份。`,
-      };
-    }
-  }
-
-  return { data: initial };
+  wipeLegacyStorageKeys();
+  const data = createInitialData(now);
+  saveData(data);
+  return { data };
 }
 
-/** 保存到 localStorage（v2 键）。配额满时返回错误信息。 */
 export function saveData(data: AppData): { ok: boolean; error?: string } {
   if (!storageAvailable()) return { ok: false, error: '浏览器不支持 localStorage' };
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    const payload: AppData = { ...data, version: DATA_VERSION, updatedAt: Date.now() };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     return { ok: true };
   } catch (error) {
     const isQuota =
@@ -937,7 +765,6 @@ export function saveData(data: AppData): { ok: boolean; error?: string } {
 /* 备份导入导出                                                         */
 /* ------------------------------------------------------------------ */
 
-/** 导出备份（默认不含 provider 的 API Key）。 */
 export function exportBackup(data: AppData, options: { includeApiKey?: boolean } = {}): string {
   const providers = data.providers.map((profile) =>
     options.includeApiKey ? profile : { ...profile, apiKey: '' },
@@ -955,11 +782,7 @@ export function exportBackup(data: AppData, options: { includeApiKey?: boolean }
   );
 }
 
-/**
- * 解析备份文件：接受 v2/v1 的导出包装，或裸 v1/v2 AppData。
- * v1 数据会自动迁移（由 hydrateData 完成）；缺少单词列表时抛错。
- */
-export function parseBackup(raw: string): AppData {
+export function importBackup(raw: string): AppData {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -968,52 +791,40 @@ export function parseBackup(raw: string): AppData {
   }
   if (!parsed || typeof parsed !== 'object') throw new Error('备份内容为空或格式不正确');
   const record = parsed as Record<string, unknown>;
-  const payload = 'data' in record ? record.data : parsed;
+  const hasWrapper = 'data' in record;
+  if (hasWrapper && record.version !== DATA_VERSION) {
+    throw new Error('仅支持 v3 备份');
+  }
+  const payload = hasWrapper ? record.data : parsed;
   if (!payload || typeof payload !== 'object') throw new Error('备份中缺少 data 字段');
+  if ((payload as Record<string, unknown>).version !== DATA_VERSION) {
+    throw new Error('仅支持 v3 备份');
+  }
   return hydrateData(payload, { requireWords: true });
 }
 
 /* ------------------------------------------------------------------ */
-/* 重置                                                                 */
+/* 重置 / 清理                                                          */
 /* ------------------------------------------------------------------ */
 
-/** 清空进度但保留词库、provider 配置与练习设置；未完成会话置空。 */
+export function clearStoredData(): void {
+  wipeLegacyStorageKeys();
+  removeV3Key();
+}
+
+/** 清空进度但保留词库、provider 配置、练习设置与主题；未完成会话置空。 */
 export function resetProgress(data: AppData, now = Date.now()): AppData {
-  const srs: Record<string, SrsCard> = {};
-  for (const word of data.words) srs[word.id] = createCard(word.id, now);
   return {
     ...data,
-    srs,
     attempts: [],
     mistakes: {},
     stats: { daily: {} },
     session: null,
     mastery: {},
-    reviewPriority: {},
     updatedAt: now,
   };
 }
 
-export function resetWordsToSeed(data: AppData, now = Date.now()): AppData {
-  const seed = createInitialData(now);
-  return {
-    ...data,
-    words: seed.words,
-    srs: seed.srs,
-    attempts: [],
-    mistakes: {},
-    session: null,
-    mastery: {},
-    reviewPriority: {},
-    updatedAt: now,
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* 存储用量 / 清理                                                       */
-/* ------------------------------------------------------------------ */
-
-/** 估算 localStorage 使用量（v2 键），用于设置页展示。 */
 export function getStorageUsage(): { bytes: number; human: string } {
   if (!storageAvailable()) return { bytes: 0, human: '不可用' };
   const raw = window.localStorage.getItem(STORAGE_KEY) ?? '';
@@ -1030,18 +841,4 @@ export function getStorageUsage(): { bytes: number; human: string } {
         ? `${(bytes / 1024).toFixed(1)} KB`
         : `${(bytes / 1024 / 1024).toFixed(2)} MB`;
   return { bytes, human };
-}
-
-/** 清空本地数据：同时删除 v1 与 v2 键。 */
-export function clearStoredData(): void {
-  try {
-    window.localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    /* ignore */
-  }
-  try {
-    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-  } catch {
-    /* ignore */
-  }
 }
