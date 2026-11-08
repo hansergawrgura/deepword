@@ -31,10 +31,8 @@ export { buildThinkingParams } from './vendors';
 
 export {
   VENDOR_OPTIONS,
-  VENDOR_PRESETS,
   checkBaseUrl,
   createInitialProviders,
-  DEFAULT_LEGACY_SETTINGS,
   findActiveProvider,
   inferVendorFromBaseUrl,
   legacySettingsToProfile,

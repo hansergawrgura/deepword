@@ -1,25 +1,11 @@
-/**
- * Phase B 掌握判定。
- *
- * 契约来源：docs/phase-b-contract.md 第 3 节。全部规则必须同时满足才算「已掌握」：
- * 1. 最近连续 3 次练习作答全对（从最新往前数，遇到错题即停）；
- * 2. 参与判定的这几次覆盖 ≥2 个技能（attempt.skill）；
- * 3. 14 天无错：now - 最近一次答错 ≥ 14 天；从未答错则从首次练习作答算起；
- * 4. 参与判定的这几次分布在 ≥2 个轮次（attempt.roundId，缺 roundId 的旧作答合并为一个 `legacy` 轮次）；
- * 5. `data.mastery[wordId]` 已存在（手动或规则标记）时直接 eligible。
- *
- * 设计约束：
- * - 纯函数：不读写 localStorage、不抛错，脏数据（缺字段、空作答表）安全降级；
- * - 只统计带合法 skill 的练习作答；无 skill 的记录不参与掌握判定；
- * - `now` 可注入，便于复现与测试；缺省为 Date.now()。
- */
-
+import type { Locale } from '@/i18n/types';
+import { DEFAULT_LOCALE } from '@/i18n/types';
+import { createT } from '@/i18n/t';
 import type { AppData, Attempt, Skill } from './types';
 import { SKILLS } from './practice';
 
-/** 掌握判定规则（契约第 3 节落定的阈值）。 */
 export const MASTERY_RULES = {
-  /** 需要连续答对的次数 */
+  /** Consecutive correct attempts required */
   consecutiveCorrect: 3,
   /** 连续答对区间至少覆盖的技能数 */
   minSkills: 2,
@@ -107,8 +93,14 @@ function roundIdOf(attempt: Attempt): string {
  * @param wordId 目标词 id
  * @param now 当前时间（毫秒），缺省 Date.now()
  */
-export function evaluateMastery(data: AppData, wordId: string, now?: number): MasteryCheck {
+export function evaluateMastery(
+  data: AppData,
+  wordId: string,
+  now?: number,
+  locale: Locale = DEFAULT_LOCALE,
+): MasteryCheck {
   const nowTs = normalizeNow(now);
+  const t = createT(locale);
   const empty: MasteryCheck = {
     eligible: false,
     streak: 0,
@@ -130,7 +122,7 @@ export function evaluateMastery(data: AppData, wordId: string, now?: number): Ma
       skills: [],
       roundIds: [],
       errorFreeDays: 0,
-      reasons: marked ? [] : ['该词还没有练习作答记录，先做几道题再判断掌握'],
+      reasons: marked ? [] : [t('domain.mastery.noAttempts')],
     };
   }
 
@@ -164,24 +156,41 @@ export function evaluateMastery(data: AppData, wordId: string, now?: number): Ma
   const reasons: string[] = [];
   if (streak < MASTERY_RULES.consecutiveCorrect) {
     reasons.push(
-      `连续答对 ${streak} 次，还差 ${MASTERY_RULES.consecutiveCorrect - streak} 次`,
+      t('domain.mastery.streakProgress', {
+        streak,
+        remaining: MASTERY_RULES.consecutiveCorrect - streak,
+      }),
     );
   }
   if (skills.length < MASTERY_RULES.minSkills) {
     reasons.push(
-      `最近 ${window.length} 次作答只覆盖 ${skills.length} 个技能，至少要覆盖 ${MASTERY_RULES.minSkills} 个`,
+      t('domain.mastery.skillsCoverage', {
+        window: window.length,
+        count: skills.length,
+        min: MASTERY_RULES.minSkills,
+      }),
     );
   }
   if (roundIds.length < MASTERY_RULES.minRounds) {
     reasons.push(
-      `最近 ${window.length} 次作答只分布在 ${roundIds.length} 个轮次，至少要分布在 ${MASTERY_RULES.minRounds} 个轮次`,
+      t('domain.mastery.roundsCoverage', {
+        window: window.length,
+        count: roundIds.length,
+        min: MASTERY_RULES.minRounds,
+      }),
     );
   }
   if (errorFreeDays < MASTERY_RULES.errorFreeDays) {
     reasons.push(
       lastWrongAt !== undefined
-        ? `距上次答错只有 ${errorFreeDays} 天，需要满 ${MASTERY_RULES.errorFreeDays} 天无错`
-        : `距首次练习只有 ${errorFreeDays} 天，需要满 ${MASTERY_RULES.errorFreeDays} 天无错`,
+        ? t('domain.mastery.errorFreeSinceWrong', {
+            days: errorFreeDays,
+            required: MASTERY_RULES.errorFreeDays,
+          })
+        : t('domain.mastery.errorFreeSinceFirst', {
+            days: errorFreeDays,
+            required: MASTERY_RULES.errorFreeDays,
+          }),
     );
   }
 

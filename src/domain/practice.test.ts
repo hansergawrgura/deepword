@@ -1,11 +1,3 @@
-/**
- * 本地出题层单测（vitest / node 环境）。
- *
- * 口径来源：docs/phase-b-contract.md 第 2 节。
- * 覆盖：buildQuestions 的技能覆盖与题量边界、tts/ai 能力开关、选项与答案的一致性、
- * checkAnswer 的 choice / spell / fill / sentence 判分与容错、空作答与脏数据安全降级。
- */
-
 import { describe, expect, it } from 'vitest';
 import type { PracticeSettings, Question, Word } from './types';
 import { DEFAULT_PRACTICE_SETTINGS } from './types';
@@ -344,10 +336,11 @@ describe('isTranslation / skillLabel', () => {
   });
 
   it('技能中文名：缺省或非法值返回「练习」', () => {
-    expect(skillLabel('en2zh')).toBe('英译中');
-    expect(skillLabel('translate')).toBe('互译');
-    expect(skillLabel(undefined)).toBe('练习');
-    expect(skillLabel('nope' as never)).toBe('练习');
+    expect(skillLabel('en2zh')).toBe('EN→ZH');
+    expect(skillLabel('translate')).toBe('Translation');
+    expect(skillLabel(undefined)).toBe('Practice');
+    expect(skillLabel('nope' as never)).toBe('Practice');
+    expect(skillLabel('en2zh', 'zh-CN')).toBe('英译中');
   });
 
   it('SKILLS 顺序固定为 6 个技能', () => {

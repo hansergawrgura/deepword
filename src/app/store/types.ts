@@ -1,5 +1,6 @@
 import type {
   AppData,
+  AppLocale,
   MasteryRecord,
   PracticeSessionState,
   PracticeSettings,
@@ -36,6 +37,7 @@ export type AppAction =
   | { type: 'DELETE_PROVIDER'; id: string; now: number }
   | { type: 'SET_ACTIVE_PROVIDER'; id: string | null; now: number }
   | { type: 'SET_THEME'; theme: ThemeMode }
+  | { type: 'SET_LOCALE'; locale: AppLocale }
   | { type: 'IMPORT_DATA'; data: AppData; now: number }
   | { type: 'RESET_ALL'; now: number }
   | { type: 'CLEAR_PROGRESS'; now: number }
@@ -66,6 +68,7 @@ export interface AppActions {
   deleteProvider: (id: string) => void;
   setActiveProvider: (id: string | null) => void;
   setTheme: (theme: ThemeMode) => void;
+  setLocale: (locale: AppLocale) => void;
   importBackup: (data: AppData) => void;
   resetAll: () => void;
   clearProgress: () => void;

@@ -1,10 +1,5 @@
 /**
  * 拉取模型列表弹窗。
- *
- * 规则：
- * - 首次拉取时若白名单为空 → 默认全选；已有白名单 → 保留原勾选，新增项默认不勾选。
- * - 再次拉取（重新拉取）保留当前勾选；此前勾选但服务端不再返回的 model 仍保留并标记「已下线」。
- * - 支持搜索、全选 / 清空、手动添加（回车加入）、取消与确认。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -12,15 +7,14 @@ import type { LLMSettings } from '@/domain/types';
 import type { ModelInfo } from '@/infra/llm';
 import { fetchModels } from '@/infra/llm';
 import { cx } from '@/domain/utils';
+import { useT } from '@/i18n';
 import { IconRefresh, IconSearch } from '@/ui/icons';
 import { Modal } from '@/ui/Modal';
 import { buildModelRows, type ModelRow } from './modelRows';
 
 export interface ModelListDialogProps {
   open: boolean;
-  /** 用表单当前值构造的设置，用于拉取列表。 */
   settings: LLMSettings;
-  /** 当前白名单（再次拉取时作为初始勾选）。 */
   selected: string[];
   onClose: () => void;
   onConfirm: (models: string[]) => void;
@@ -37,6 +31,7 @@ export default function ModelListDialog({
   onClose,
   onConfirm,
 }: ModelListDialogProps) {
+  const t = useT();
   const [loading, setLoading] = useState(false);
   const [warning, setWarning] = useState('');
   const [fetched, setFetched] = useState<ModelInfo[]>([]);
@@ -48,7 +43,6 @@ export default function ModelListDialog({
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const initialSelectedRef = useRef<string[]>([]);
-  /** 本次弹窗会话里服务端返回过的所有 model id（用于重新拉取后保留已勾选的下架项）。 */
   const seenFetchedIdsRef = useRef<string[]>([]);
   const loadedOnceRef = useRef(false);
   const openSeqRef = useRef(0);
@@ -71,7 +65,6 @@ export default function ModelListDialog({
         if (previous.length > 0) {
           setSelection(previous);
         } else {
-          // 首次拉取且白名单为空时默认全选；但保留用户在加载期间手动添加的项。
           setSelection((current) =>
             current.length > 0 ? current : models.map((model) => model.id),
           );
@@ -81,14 +74,13 @@ export default function ModelListDialog({
     } catch (error) {
       if (token !== openSeqRef.current) return;
       setWarning(
-        error instanceof Error ? error.message : '拉取模型列表失败，请检查 Base URL 与网络。',
+        error instanceof Error ? error.message : t('providers.modelDialogFetchFailed'),
       );
     } finally {
       if (token === openSeqRef.current) setLoading(false);
     }
   }
 
-  // 每次打开弹窗都重新拉取一次；settings / selected 通过 ref 读取当前值。
   useEffect(() => {
     if (!open) return;
     const token = openSeqRef.current + 1;
@@ -106,7 +98,6 @@ export default function ModelListDialog({
     return () => {
       openSeqRef.current += 1;
     };
-    // 只在 open 变化时重置；其余字段从 ref 读取最新值。
   }, [open]);
 
   function refetch() {
@@ -179,15 +170,15 @@ export default function ModelListDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title="拉取模型列表"
-      subtitle="勾选要保留在配置里的模型；已下线的模型不会再被默认选中。"
+      title={t('providers.modelDialogTitle')}
+      subtitle={t('providers.modelDialogSub')}
       footer={
         <>
           <button type="button" className="btn btn--quiet" onClick={onClose}>
-            取消
+            {t('common.cancel')}
           </button>
           <button type="button" className="btn btn--primary" onClick={confirm} disabled={loading}>
-            确认（{selection.length}）
+            {t('providers.modelDialogConfirm', { count: selection.length })}
           </button>
         </>
       }
@@ -200,15 +191,18 @@ export default function ModelListDialog({
               className="input"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索模型 id"
-              aria-label="搜索模型"
+              placeholder={t('providers.modelDialogSearchPlaceholder')}
+              aria-label={t('providers.modelDialogSearchAria')}
               spellCheck={false}
               autoComplete="off"
             />
           </div>
           <div className="model-dialog__tools">
             <span className="model-dialog__count">
-              已选 {selection.length} / 共 {merged.length}
+              {t('providers.modelDialogSelectedCount', {
+                selected: selection.length,
+                total: merged.length,
+              })}
             </span>
             <button
               type="button"
@@ -216,7 +210,7 @@ export default function ModelListDialog({
               onClick={selectAllVisible}
               disabled={filtered.length === 0}
             >
-              全选
+              {t('providers.modelDialogSelectAll')}
             </button>
             <button
               type="button"
@@ -224,7 +218,7 @@ export default function ModelListDialog({
               onClick={clearVisible}
               disabled={selection.length === 0}
             >
-              清空
+              {t('providers.modelDialogClear')}
             </button>
             <button
               type="button"
@@ -232,7 +226,7 @@ export default function ModelListDialog({
               onClick={refetch}
               disabled={loading}
             >
-              <IconRefresh size={13} /> 重新拉取
+              <IconRefresh size={13} /> {t('providers.modelDialogRefetch')}
             </button>
           </div>
         </div>
@@ -247,8 +241,8 @@ export default function ModelListDialog({
               event.preventDefault();
               addManual();
             }}
-            placeholder="手动添加模型 id，例如 my-model"
-            aria-label="手动添加模型"
+            placeholder={t('providers.modelDialogManualPlaceholder')}
+            aria-label={t('providers.modelDialogManualAria')}
             spellCheck={false}
             autoComplete="off"
           />
@@ -258,21 +252,21 @@ export default function ModelListDialog({
             onClick={addManual}
             disabled={!manualInput.trim()}
           >
-            添加
+            {t('providers.modelDialogManualAdd')}
           </button>
         </div>
-        <p className="hint">输入后按回车即可加入；默认 model 也可以不在白名单中。</p>
+        <p className="hint">{t('providers.modelDialogManualHint')}</p>
 
         {loading ? (
           <div className="model-dialog__status">
-            <span className="spinner" aria-hidden="true" /> 正在向服务商拉取模型列表…
+            <span className="spinner" aria-hidden="true" /> {t('providers.modelDialogLoading')}
           </div>
         ) : (
           <>
             {warning && (
               <div className="callout callout--warn model-dialog__warning">
                 <div>
-                  <p className="callout__title">未能完整拉取模型列表</p>
+                  <p className="callout__title">{t('providers.modelDialogWarnTitle')}</p>
                   <p>{warning}</p>
                 </div>
               </div>
@@ -281,15 +275,17 @@ export default function ModelListDialog({
             {filtered.length === 0 ? (
               <div className="empty-state model-dialog__empty">
                 <span className="empty-state__mark" aria-hidden="true">
-                  录
+                  {t('providers.modelDialogEmptyMark')}
                 </span>
                 <p className="empty-state__title">
-                  {merged.length === 0 ? '没有可勾选的模型' : '没有匹配的模型'}
+                  {merged.length === 0
+                    ? t('providers.modelDialogEmptyNone')
+                    : t('providers.modelDialogEmptyNoMatch')}
                 </p>
                 <p className="empty-state__desc">
                   {merged.length === 0
-                    ? '服务没有返回模型列表，可以直接在上面的输入框手动添加模型 id。'
-                    : '换个关键词，或清空搜索再看全部。'}
+                    ? t('providers.modelDialogEmptyNoneDesc')
+                    : t('providers.modelDialogEmptyNoMatchDesc')}
                 </p>
               </div>
             ) : (
@@ -303,7 +299,7 @@ export default function ModelListDialog({
                           type="checkbox"
                           checked={checked}
                           onChange={() => toggleModel(row.model.id)}
-                          aria-label={`保留模型 ${row.model.id}`}
+                          aria-label={t('providers.modelDialogKeepAria', { id: row.model.id })}
                         />
                         <span className="model-row__text">
                           <span className="model-row__id">{row.model.id}</span>
@@ -313,14 +309,20 @@ export default function ModelListDialog({
                         </span>
                         <span className="model-row__tags">
                           {row.origin === 'legacy' && (
-                            <span className="badge badge--gold">已下线</span>
+                            <span className="badge badge--gold">
+                              {t('providers.modelDialogRetired')}
+                            </span>
                           )}
                           {row.origin === 'manual' && (
-                            <span className="badge badge--outline">手动添加</span>
+                            <span className="badge badge--outline">
+                              {t('providers.modelDialogManualBadge')}
+                            </span>
                           )}
                           {row.origin === 'fetched' &&
                             isRetiredLifecycle(row.model.lifecycle) && (
-                              <span className="badge badge--gold">已下线</span>
+                              <span className="badge badge--gold">
+                                {t('providers.modelDialogRetired')}
+                              </span>
                             )}
                           {row.model.maxTokens ? (
                             <span className="model-row__meta">≤ {row.model.maxTokens} tok</span>

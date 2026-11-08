@@ -1,5 +1,9 @@
 /** 通用工具函数：id、日期、随机、格式化。 */
 
+import type { Locale } from '@/i18n/types';
+import { DEFAULT_LOCALE } from '@/i18n/types';
+import { createT } from '@/i18n/t';
+
 let idCounter = 0;
 
 export function uid(prefix = 'id'): string {
@@ -17,33 +21,41 @@ export function dayKey(date: Date | number = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
-export function relativeTime(ts: number, now = Date.now()): string {
+export function relativeTime(ts: number, now = Date.now(), locale: Locale = DEFAULT_LOCALE): string {
+  const t = createT(locale);
   const diff = now - ts;
-  if (diff < 60_000) return '刚刚';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`;
+  if (diff < 60_000) return t('domain.relative.justNow');
+  if (diff < 3_600_000) {
+    return t('domain.relative.minutesAgo', { n: Math.floor(diff / 60_000) });
+  }
+  if (diff < 86_400_000) {
+    return t('domain.relative.hoursAgo', { n: Math.floor(diff / 3_600_000) });
+  }
   const days = Math.floor(diff / 86_400_000);
-  if (days === 1) return '昨天';
-  if (days < 30) return `${days} 天前`;
-  return new Date(ts).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  if (days === 1) return t('domain.relative.yesterday');
+  if (days < 30) return t('domain.relative.daysAgo', { n: days });
+  const dateLocale = locale === 'zh-CN' ? 'zh-CN' : 'en-US';
+  return new Date(ts).toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' });
 }
 
-export function formatDate(ts: number = Date.now()): string {
-  return new Date(ts).toLocaleDateString('zh-CN', {
+export function formatDate(ts: number = Date.now(), locale: Locale = DEFAULT_LOCALE): string {
+  const dateLocale = locale === 'zh-CN' ? 'zh-CN' : 'en-US';
+  return new Date(ts).toLocaleDateString(dateLocale, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
 }
 
-export function formatMonthDay(ts: number): string {
-  return new Date(ts).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+export function formatMonthDay(ts: number, locale: Locale = DEFAULT_LOCALE): string {
+  const dateLocale = locale === 'zh-CN' ? 'zh-CN' : 'en-US';
+  return new Date(ts).toLocaleDateString(dateLocale, { month: '2-digit', day: '2-digit' });
 }
 
-export function weekdayName(ts: number = Date.now()): string {
-  return ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][
-    new Date(ts).getDay()
-  ];
+export function weekdayName(ts: number = Date.now(), locale: Locale = DEFAULT_LOCALE): string {
+  const t = createT(locale);
+  const day = new Date(ts).getDay();
+  return t(`domain.weekday.${day}` as 'domain.weekday.0');
 }
 
 export function shuffle<T>(items: readonly T[]): T[] {
@@ -81,24 +93,18 @@ export function normalizeAnswer(value: string): string {
     .trim();
 }
 
+/** @deprecated 使用 partOfSpeechLabel */
 export function partOfSpeechZh(pos?: string): string {
+  return partOfSpeechLabel(pos, 'zh-CN');
+}
+
+export function partOfSpeechLabel(pos?: string, locale: Locale = DEFAULT_LOCALE): string {
   if (!pos) return '';
-  const map: Record<string, string> = {
-    n: '名词',
-    v: '动词',
-    vt: '及物动词',
-    vi: '不及物动词',
-    adj: '形容词',
-    adv: '副词',
-    prep: '介词',
-    conj: '连词',
-    pron: '代词',
-    num: '数词',
-    phr: '短语',
-    phrase: '短语',
-  };
+  const t = createT(locale);
   const key = pos.trim().toLowerCase().replace(/\./g, '');
-  return map[key] ?? pos;
+  const path = `domain.pos.${key}`;
+  const label = t(path);
+  return label === path ? pos : label;
 }
 
 export function truncate(text: string, max: number): string {

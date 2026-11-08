@@ -1,33 +1,13 @@
 /**
- * 一道题的面板：题干、选项/输入、判分反馈。
- *
- * 作答方式：
- * - 选择题（含例句填空、听音）：点选项即作答，不再需要单独点「提交」；
- *   键盘 A / B / C / D 与点击等价，按下即提交；
- * - 拼写 / 互译：输入后回车（互译为 Cmd / Ctrl + Enter）提交。
- *
- * 反馈规则（Phase B）：
- * - 答对：本地鼓励语，按 settings.feedbackAutoAdvanceMs 自动下一题（0 = 手动），
- *   自动跳转期间显示倒计时（剩余秒数 + 进度条）；
- * - 答错：反馈照常给出（流式 AI 讲解 / 本地解析），但题目**不锁** ——
- *   phase 进入 retry，可以继续作答直到答对；只有答对才锁题并允许「下一题」；
- *   答错时给出「跳过这题」，不想再试也能往下走；
- * - 互译：三档判分；`poor` 必须等流式结束且点过「我看完了」才能下一题；
- * - 新词第 1 题的反馈附完整词条信息。
- *
- * 选项状态（选中 / 答对 / 答错）统一由 ./optionState 计算，组件只做样式映射；
- * 动效与声效通过同一个 emitOptionFeedback 出口挂载，不在此处散落判断。
- *
- * 布局：左栏题目卡常驻；右栏解析仅在作答后展开，下一题自动收缩。
- * 窄屏降级为上下排列。题干英文可点词解析；选中文本可出现解析图标。
- *
- * 组件不直接读写数据，判分与记录由 StudyView 驱动。
+ * Wrong answers keep the question unlocked (retry) until correct or skip;
+ * translation `poor` requires reading the explanation before next.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Question, Word } from '@/domain/types';
-import { SKILL_META, isTranslation } from '@/domain/practice';
+import { isTranslation } from '@/domain/practice';
 import { cx } from '@/domain/utils';
+import { useT } from '@/i18n';
 import { IconVolume } from '@/ui/icons';
 import ClickableWords from './lookup/ClickableWords';
 import SelectionAssist from './lookup/SelectionAssist';
@@ -66,10 +46,10 @@ export interface QuestionCardProps {
   onSpeak: (text: string, slow?: boolean) => void;
 }
 
-const VERDICT_META = {
-  perfect: { label: '完全正确', tone: 'is-perfect' },
-  good: { label: '基本正确', tone: 'is-good' },
-  poor: { label: '还需打磨', tone: 'is-poor' },
+const VERDICT_TONE = {
+  perfect: 'is-perfect',
+  good: 'is-good',
+  poor: 'is-poor',
 } as const;
 
 export default function QuestionCard({
@@ -89,13 +69,16 @@ export default function QuestionCard({
   onNext,
   onSpeak,
 }: QuestionCardProps) {
+  const t = useT();
   const [response, setResponse] = useState('');
   const [readDone, setReadDone] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const paneRef = useRef<HTMLElement | null>(null);
   const cardRef = useRef<HTMLElement | null>(null);
   const translation = isTranslation(question);
-  const skillMeta = question.skill ? SKILL_META[question.skill] : undefined;
+  const skillLabel = question.skill
+    ? t(`domain.skill.${question.skill}.label` as const)
+    : t('domain.skill.fallback');
   const answered = phase === 'answered';
   /** 题目是否仍可继续作答：idle（未答）与 retry（答错后）都可。 */
   const editable = isAnswering(phase);
@@ -248,11 +231,11 @@ export default function QuestionCard({
   return (
     <div className={cx('practice-layout', feedbackOpen && 'is-feedback-open')}>
       {/* ------------------------------ 左栏：题目 ------------------------------ */}
-      <section ref={cardRef} className="practice-card" aria-label="练习题">
+      <section ref={cardRef} className="practice-card" aria-label={t('study.practiceAria')}>
         <header className="practice-card__head">
-          <span className="badge badge--outline">{skillMeta?.label ?? '练习'}</span>
+          <span className="badge badge--outline">{skillLabel}</span>
           <span className="practice-card__counter">
-            第 <strong>{index + 1}</strong> / {total} 题
+            {t('study.counter', { current: index + 1, total })}
           </span>
         </header>
 
@@ -270,20 +253,20 @@ export default function QuestionCard({
               type="button"
               className="study-speak"
               onClick={() => onSpeak(word.term)}
-              aria-label={`朗读 ${word.term}`}
+              aria-label={t('study.speakAria', { term: word.term })}
             >
               <IconVolume size={15} />
-              再听一次
+              {t('study.listenAgain')}
             </button>
             <button
               type="button"
               className="study-speak"
               onClick={() => onSpeak(word.term, true)}
-              aria-label={`慢速朗读 ${word.term}`}
+              aria-label={t('study.slowSpeak', { term: word.term })}
             >
-              慢速
+              {t('study.slow')}
             </button>
-            <span className="practice-card__audio-hint">听发音，选出正确的释义。</span>
+            <span className="practice-card__audio-hint">{t('domain.practice.listenPrompt')}</span>
           </div>
         ) : null}
 
@@ -316,7 +299,7 @@ export default function QuestionCard({
         ) : question.skill === 'spell' ? (
           <div className="practice-input">
             <label className="label" htmlFor="practice-spell">
-              写出这个单词
+              {t('study.spellLabel')}
             </label>
             <input
               id="practice-spell"
@@ -327,7 +310,7 @@ export default function QuestionCard({
               spellCheck={false}
               value={response}
               disabled={!editable}
-              placeholder="在这里作答后回车"
+              placeholder={t('study.spellPlaceholder')}
               onChange={(event) => setResponse(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.repeat) {
@@ -340,7 +323,7 @@ export default function QuestionCard({
         ) : (
           <div className="practice-input">
             <label className="label" htmlFor="practice-translate">
-              {question.direction === 'zh2en' ? '写出英文译文' : '写出中文译文'}
+              {question.direction === 'zh2en' ? t('study.translateEn') : t('study.translateZh')}
             </label>
             <textarea
               id="practice-translate"
@@ -349,7 +332,7 @@ export default function QuestionCard({
               rows={3}
               value={response}
               disabled={!editable}
-              placeholder="写下你的译文"
+              placeholder={t('study.translatePlaceholder')}
               onChange={(event) => setResponse(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.repeat) {
@@ -358,7 +341,7 @@ export default function QuestionCard({
                 }
               }}
             />
-            <p className="hint">Cmd / Ctrl + Enter 提交译文；AI 会逐条判分并给出改进建议。</p>
+            <p className="hint">{t('study.translateSubmitHint')}</p>
           </div>
         )}
         </div>
@@ -373,30 +356,30 @@ export default function QuestionCard({
               disabled={!response.trim()}
               onClick={submit}
             >
-              {phase === 'retry' ? '再提交' : translation ? '提交译文' : '提交作答'}
+              {phase === 'retry' ? t('study.submitRetry') : translation ? t('study.submitTranslation') : t('study.submitAnswer')}
             </button>
           </div>
         ) : null}
 
         {phase === 'judging' ? (
-          <p className="practice-feedback__pending">正在判分…</p>
+          <p className="practice-feedback__pending">{t('study.judging')}</p>
         ) : null}
 
         {phase === 'retry' ? (
           <p className="practice-card__hint practice-card__hint--retry">
             {choiceMode
-              ? '答错了，题目没有锁 —— 直接选下一个，直到选对为止。'
-              : '答错了，题目没有锁 —— 改完再提交一次。'}
+              ? t('study.retryChoice')
+              : t('study.retryInput')}
           </p>
         ) : !answered && phase === 'idle' ? (
           <p className="practice-card__hint">
             {choiceMode
-              ? '点选项直接作答，也可以按 A / B / C / D 选择。'
+              ? t('study.hintChoice')
               : translation
-                ? '译文由 AI 判分：三档 perfect / good / poor。'
+                ? t('study.hintTranslation')
                 : question.skill === 'spell'
-                  ? '拼写不计大小写，但要注意词形变化。'
-                  : '写完按 Cmd / Ctrl + Enter 提交。'}
+                  ? t('study.hintSpell')
+                  : t('study.hintEnter')}
           </p>
         ) : null}
         </div>
@@ -411,7 +394,7 @@ export default function QuestionCard({
         className={cx('practice-feedback-pane', !feedback && 'is-idle')}
         role="status"
         aria-live={feedbackOpen && feedback ? 'polite' : 'off'}
-        aria-label="答题反馈"
+        aria-label={t('study.feedbackAria')}
         aria-hidden={!feedbackOpen || undefined}
         inert={!feedbackOpen || undefined}
       >
@@ -420,7 +403,7 @@ export default function QuestionCard({
             className={cx(
               'practice-feedback-panel',
               feedback.verdict
-                ? `is-verdict ${VERDICT_META[feedback.verdict].tone}`
+                ? `is-verdict ${VERDICT_TONE[feedback.verdict]}`
                 : 'is-graded',
             )}
           >
@@ -428,17 +411,21 @@ export default function QuestionCard({
               <div className="practice-feedback__head">
                 <strong>
                   {feedback.verdict
-                    ? VERDICT_META[feedback.verdict].label
+                    ? (feedback.verdict === 'perfect'
+                      ? t('study.verdictPerfect')
+                      : feedback.verdict === 'good'
+                        ? t('study.verdictGood')
+                        : t('study.verdictPoor'))
                     : feedback.streaming
-                      ? '讲解中'
-                      : '已记录'}
+                      ? t('study.explaining')
+                      : t('study.recorded')}
                 </strong>
                 {feedback.streaming ? (
-                  <span className="practice-feedback__live">正在流式输出…</span>
+                  <span className="practice-feedback__live">{t('study.streaming')}</span>
                 ) : feedback.status === 'local-fallback' ? (
-                  <span className="practice-feedback__badge">本地解析</span>
+                  <span className="practice-feedback__badge">{t('study.localFallback')}</span>
                 ) : feedback.status === 'failed' ? (
-                  <span className="practice-feedback__badge">讲解失败 · 本地解析</span>
+                  <span className="practice-feedback__badge">{t('study.explainFailed')}</span>
                 ) : null}
               </div>
 
@@ -448,7 +435,7 @@ export default function QuestionCard({
 
               {feedback.improvement ? (
                 <p className="practice-feedback__improve">
-                  <span className="practice-feedback__label">改进</span>
+                  <span className="practice-feedback__label">{t('study.improvement')}</span>
                   {feedback.improvement}
                 </p>
               ) : null}
@@ -485,7 +472,7 @@ export default function QuestionCard({
                     disabled={explaining}
                     onClick={onAskExplain}
                   >
-                    {explaining ? '正在讲解…' : '让 AI 讲讲'}
+                    {explaining ? t('study.askingAi') : t('study.askAi')}
                   </button>
                 ) : null}
 
@@ -496,12 +483,12 @@ export default function QuestionCard({
                     disabled={streaming}
                     onClick={() => setReadDone(true)}
                   >
-                    我看完了
+                    {t('study.readDone')}
                   </button>
                 ) : null}
                 {phase === 'retry' ? (
                   <button type="button" className="btn btn--ghost" onClick={onNext}>
-                    跳过这题
+                    {t('study.skipQuestion')}
                   </button>
                 ) : (
                   <button
@@ -510,7 +497,7 @@ export default function QuestionCard({
                     disabled={!canAdvance}
                     onClick={onNext}
                   >
-                    {mustReadExplanation && !readDone ? '先看完讲解' : '下一题'}
+                    {mustReadExplanation && !readDone ? t('study.readFirst') : t('study.nextQuestion')}
                   </button>
                 )}
               </div>
@@ -522,8 +509,8 @@ export default function QuestionCard({
                   </span>
                   <span className="practice-countdown__text">
                     {countdownSeconds > 0
-                      ? `${countdownSeconds} 秒后自动进入下一题`
-                      : '即将进入下一题…'}
+                      ? t('study.autoAdvance', { seconds: countdownSeconds })
+                      : t('study.autoAdvanceSoon')}
                   </span>
                 </div>
               ) : null}
@@ -534,9 +521,9 @@ export default function QuestionCard({
             <p className="practice-feedback__idle">
               {feedbackOpen
                 ? phase === 'judging'
-                  ? '正在判分…'
-                  : '讲解生成中…'
-                : '作答后，这里显示讲解与「下一题」。'}
+                  ? t('study.idleJudging')
+                  : t('study.idleGenerating')
+                : t('study.idlePlaceholder')}
             </p>
           </div>
         )}

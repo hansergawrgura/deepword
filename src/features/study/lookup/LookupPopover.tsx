@@ -5,6 +5,7 @@
 import { useEffect, useRef, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from '@/domain/utils';
+import { useT } from '@/i18n';
 import { IconClose } from '@/ui/icons';
 import type { StudyLookupState } from './useStudyLookup';
 
@@ -13,14 +14,16 @@ export interface LookupPopoverProps {
   onClose: () => void;
 }
 
-const KIND_LABEL = {
-  word: '单词解析',
-  sentence: '句子解析',
-  search: '查询结果',
-} as const;
-
 export default function LookupPopover({ active, onClose }: LookupPopoverProps) {
+  const t = useT();
   const panelRef = useRef<HTMLDivElement | null>(null);
+
+  const kindLabel =
+    active.kind === 'word'
+      ? t('study.lookupKindWord')
+      : active.kind === 'sentence'
+        ? t('study.lookupKindSentence')
+        : t('study.lookupKindSearch');
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -36,7 +39,6 @@ export default function LookupPopover({ active, onClose }: LookupPopoverProps) {
       onClose();
     };
     window.addEventListener('keydown', onKey);
-    // 延迟绑定，避免打开当次点击立刻关掉。
     const timer = window.setTimeout(() => {
       document.addEventListener('mousedown', onPointer);
     }, 0);
@@ -69,21 +71,21 @@ export default function LookupPopover({ active, onClose }: LookupPopoverProps) {
       )}
       style={style}
       role="dialog"
-      aria-label={KIND_LABEL[active.kind]}
+      aria-label={kindLabel}
     >
       <header className="study-lookup-pop__head">
         <div className="study-lookup-pop__meta">
-          <strong>{KIND_LABEL[active.kind]}</strong>
+          <strong>{kindLabel}</strong>
           <span className="study-lookup-pop__query">{active.query}</span>
         </div>
-        <button type="button" className="icon-btn" aria-label="关闭解析" onClick={onClose}>
+        <button type="button" className="icon-btn" aria-label={t('study.lookupClose')} onClick={onClose}>
           <IconClose size={14} />
         </button>
       </header>
 
       <div className="study-lookup-pop__body">
         {active.status === 'loading' ? (
-          <p className="study-lookup-pop__pending">正在解析…</p>
+          <p className="study-lookup-pop__pending">{t('study.lookupLoading')}</p>
         ) : (
           <p className="study-lookup-pop__text">{active.text}</p>
         )}
@@ -91,9 +93,9 @@ export default function LookupPopover({ active, onClose }: LookupPopoverProps) {
 
       {active.status === 'ready' ? (
         <footer className="study-lookup-pop__foot">
-          {active.local ? <span>来自词库</span> : null}
-          {active.cached ? <span>已缓存</span> : null}
-          {!active.local && !active.cached ? <span>刚刚生成</span> : null}
+          {active.local ? <span>{t('study.sourceLocal')}</span> : null}
+          {active.cached ? <span>{t('study.sourceCached')}</span> : null}
+          {!active.local && !active.cached ? <span>{t('study.sourceFresh')}</span> : null}
         </footer>
       ) : null}
     </div>,

@@ -1,5 +1,6 @@
 /** Provider 设置用的本地草稿工具：profile ⇄ draft ⇄ LLMSettings。 */
 
+import type { TranslateFn } from '@/i18n';
 import { toLLMSettings } from '@/infra/llm/providerModel';
 import type {
   LLMSettings,
@@ -26,12 +27,14 @@ export const PROTOCOL_OPTIONS: ReadonlyArray<{
   },
 ];
 
-export function protocolLabel(protocol: ProviderKind): string {
-  return protocol === 'anthropic' ? 'Anthropic' : 'OpenAI 兼容';
+export function protocolLabel(protocol: ProviderKind, t: TranslateFn): string {
+  return protocol === 'anthropic' ? 'Anthropic' : t('providers.openaiCompat');
 }
 
-export function thinkingModeLabel(mode: ThinkingMode): string {
-  return mode === 'provider-default' ? '交给服务商默认' : '尽量关闭';
+export function thinkingModeLabel(mode: ThinkingMode, t: TranslateFn): string {
+  return mode === 'provider-default'
+    ? t('providers.thinkingProviderDefault')
+    : t('providers.thinkingTryOff');
 }
 
 /** 新建配置时的空白草稿。 */

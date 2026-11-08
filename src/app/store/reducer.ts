@@ -269,6 +269,8 @@ export function appReducer(data: AppData, action: AppAction): AppData {
 
     case 'SET_THEME':
       return { ...data, theme: action.theme };
+    case 'SET_LOCALE':
+      return { ...data, locale: action.locale };
 
     case 'SET_SESSION':
       return { ...data, session: action.session };
@@ -323,6 +325,7 @@ export function appReducer(data: AppData, action: AppAction): AppData {
         activeProviderId: data.activeProviderId,
         practice: data.practice,
         theme: data.theme,
+        locale: data.locale ?? fresh.locale,
       };
     }
 

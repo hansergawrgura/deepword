@@ -1,13 +1,4 @@
-/**
- * AI 讲解与互译判分的提示词（Phase B，契约见 docs/phase-b-contract.md §7）。
- *
- * 设计原则：
- * - 提示词全部中文；输出严格纯文本，禁止 JSON / markdown 代码围栏包装正文；
- * - 答错讲解固定输出「错因 / 记忆点 / 改进」三段，便于 `parseFeedbackImprovement` 本地解析；
- * - 互译判分首行为 `VERDICT: perfect|good|poor` 协议行，空行后才是讲解正文，
- *   便于流式过程中一解析出结论就立即回调。
- * - 提示词里不会携带 API Key，也不会要求模型回显设置信息。
- */
+/** Model-facing prompts for answer feedback and translation grading (not UI i18n). */
 
 import type { Word } from '@/domain/types';
 import type { AnswerFeedbackInput, TranslateGradeInput } from './feedback';

@@ -1,20 +1,7 @@
-/**
- * Phase B 本地出题层（6 种记忆技能）。
- *
- * 契约来源：docs/phase-b-contract.md 第 2 节。全部题目本地生成、离线可用：
- * - en2zh / zh2en / listen / sentence 为可自动判分的选择题（answer 严格等于某个选项原文）；
- * - spell 为拼写题（answer 为词条原文，acceptableAnswers 覆盖大小写变体）；
- * - translate 为互译自由作答（需例句与例句翻译，且仅在配置了可用 LLM 时生成）。
- *
- * 设计约束：
- * - 纯函数、不读写 localStorage、不抛错（脏数据安全降级为空题）；
- * - 随机源可注入（rng），缺省 Math.random；
- * - 技能可用性：listen 需浏览器英文语音（ttsAvailable），translate 需 AI（aiAvailable）；
- *   技能不可用时回退 en2zh / zh2en / spell（必要时再加 sentence / listen / translate）补齐题量；
- * - 同一组题内不重复「wordId + skill + prompt」，因此每个技能准备了最多 2 套题干变体，
- *   用于在无 TTS / 无 AI / 无例句时仍能尽量补齐 4~8 题的题量。
- */
-
+import type { Locale } from '@/i18n/types';
+import { DEFAULT_LOCALE } from '@/i18n/types';
+import { createT } from '@/i18n/t';
+import type { TranslateFn } from '@/i18n/types';
 import type { PracticeSettings, Question, Skill, Word } from './types';
 import { normalizeAnswer, uid } from './utils';
 
@@ -93,6 +80,21 @@ export interface GenerateOptions {
   skills?: Skill[];
   /** 是否为新词（第 1 题反馈附词条信息由 UI 处理，这里仅影响题量分配）。 */
   isNewWord?: boolean;
+  /** 题干与标签文案语言，默认英语。 */
+  locale?: Locale;
+}
+
+/** 按语言返回技能展示元数据（needsTts / needsAI 仍来自 SKILL_META）。 */
+export function getSkillMeta(skill: Skill, locale: Locale = DEFAULT_LOCALE): SkillMeta {
+  const t = createT(locale);
+  const base = SKILL_META[skill];
+  return {
+    label: t(`domain.skill.${skill}.label`),
+    short: t(`domain.skill.${skill}.short`),
+    description: t(`domain.skill.${skill}.description`),
+    needsTts: base.needsTts,
+    needsAI: base.needsAI,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -159,6 +161,8 @@ interface BuildContext {
   ttsAvailable: boolean;
   aiAvailable: boolean;
   rng: () => number;
+  locale: Locale;
+  t: TranslateFn;
   /** 已出过的 `wordId + skill + prompt`，用于去重。 */
   usedKeys: Set<string>;
   translateCount: number;
@@ -518,11 +522,11 @@ function buildMeaningChoiceQuestion(
   const options = shuffleWithRng([answer, ...distractors], ctx.rng);
   let prompt: string;
   if (skill === 'listen') {
-    prompt = '听发音，选出正确的释义。';
+    prompt = ctx.t('domain.practice.listenPrompt');
   } else if (variant === 0) {
-    prompt = `「${target.term}」最接近以下哪个意思？`;
+    prompt = ctx.t('domain.practice.en2zhPromptV0', { term: target.term });
   } else {
-    prompt = `下列哪一项是「${target.term}」的正确释义？`;
+    prompt = ctx.t('domain.practice.en2zhPromptV1', { term: target.term });
   }
 
   return {
@@ -552,8 +556,8 @@ function buildTermChoiceQuestion(
   const options = shuffleWithRng([answer, ...distractors], ctx.rng);
   const prompt =
     variant === 0
-      ? `以下哪个单词意为「${target.meaning}」？`
-      : `「${target.meaning}」对应的英文单词是？`;
+      ? ctx.t('domain.practice.zh2enPromptV0', { meaning: target.meaning })
+      : ctx.t('domain.practice.zh2enPromptV1', { meaning: target.meaning });
 
   return {
     id: uid('q'),
@@ -573,14 +577,16 @@ function buildTermChoiceQuestion(
 function buildSpellQuestion(
   target: UsableWord,
   variant: number,
-  _ctx: BuildContext,
+  ctx: BuildContext,
 ): Question | null {
   const answer = target.term;
-  const phoneticNote = target.phonetic ? `（音标 ${target.phonetic}）` : '';
+  const phoneticNote = target.phonetic
+    ? ctx.t('domain.practice.phoneticNote', { phonetic: target.phonetic })
+    : '';
   const prompt =
     variant === 0
-      ? `看释义写出英文单词：${target.meaning}${phoneticNote}。`
-      : `拼写练习：写出意为「${target.meaning}」的英文单词。`;
+      ? ctx.t('domain.practice.spellPromptV0', { meaning: target.meaning, phoneticNote })
+      : ctx.t('domain.practice.spellPromptV1', { meaning: target.meaning });
 
   return {
     id: uid('q'),
@@ -619,8 +625,8 @@ function buildSentenceQuestion(
   const options = shuffleWithRng([answer, ...distractors], ctx.rng);
   const prompt =
     variant === 0
-      ? `选词填空：${blank.prompt}`
-      : `补全例句，选出应填入空格的单词：${blank.prompt}`;
+      ? ctx.t('domain.practice.sentencePromptV0', { blank: blank.prompt })
+      : ctx.t('domain.practice.sentencePromptV1', { blank: blank.prompt });
   const translation = target.exampleTranslation ? `（${target.exampleTranslation}）` : '';
 
   return {
@@ -649,8 +655,8 @@ function buildTranslateQuestion(
   const direction: 'en2zh' | 'zh2en' = variant === 1 ? 'zh2en' : 'en2zh';
   const prompt =
     direction === 'en2zh'
-      ? `把下面的英文句子翻译成中文：${target.example}`
-      : `把下面的中文句子翻译成英文：${target.exampleTranslation}`;
+      ? ctx.t('domain.practice.translatePromptZh', { text: target.example })
+      : ctx.t('domain.practice.translatePromptEn', { text: target.exampleTranslation });
   const answer = direction === 'en2zh' ? target.exampleTranslation : target.example;
 
   return {
@@ -658,7 +664,13 @@ function buildTranslateQuestion(
     wordId: target.id,
     prompt: clip(prompt, MAX_PROMPT),
     answer,
-    explanation: clip(`参考译文：${answer}。记忆点：${describeMeaning(target)}。`, MAX_EXPLANATION),
+    explanation: clip(
+      ctx.t('domain.practice.referenceTranslation', {
+        answer,
+        meaning: describeMeaning(target),
+      }),
+      MAX_EXPLANATION,
+    ),
     difficulty: DIFFICULTY.translate,
     skill: 'translate',
     direction,
@@ -800,11 +812,14 @@ function pickSkillSequence(
 /* ------------------------------------------------------------------ */
 
 function createContext(pool: UsableWord[], options: GenerateOptions | undefined, count: number): BuildContext {
+  const locale = options?.locale ?? DEFAULT_LOCALE;
   return {
     pool,
     ttsAvailable: options?.ttsAvailable === true,
     aiAvailable: options?.aiAvailable === true,
     rng: normalizeRng(options?.rng),
+    locale,
+    t: createT(locale),
     usedKeys: new Set<string>(),
     translateCount: 0,
     maxTranslate: count < 3 ? 0 : Math.floor(count / 3),
@@ -1005,8 +1020,9 @@ export function checkAnswer(question: Question, response: string): boolean {
   }
 }
 
-/** 技能中文名；缺省或非法时返回「练习」。 */
-export function skillLabel(skill?: Skill): string {
-  if (!isSkillValue(skill)) return '练习';
-  return SKILL_META[skill].label;
+/** 技能展示名；缺省或非法时返回 fallback 文案。 */
+export function skillLabel(skill?: Skill, locale: Locale = DEFAULT_LOCALE): string {
+  const t = createT(locale);
+  if (!isSkillValue(skill)) return t('domain.skill.fallback');
+  return getSkillMeta(skill, locale).label;
 }

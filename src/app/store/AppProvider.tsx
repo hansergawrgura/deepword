@@ -1,7 +1,3 @@
-/**
- * v3 全局状态：AppData + 写操作 + Toast。
- */
-
 import {
   createContext,
   useCallback,
@@ -15,6 +11,7 @@ import {
 } from 'react';
 import type {
   AppData,
+  AppLocale,
   MasteryRecord,
   PracticeSessionState,
   PracticeSettings,
@@ -27,6 +24,7 @@ import type {
 } from '@/domain/types';
 import { MAX_PROVIDERS } from '@/domain/types';
 import { uid } from '@/domain/utils';
+import { createT, I18nProvider, normalizeLocale } from '@/i18n';
 import { loadData, normalizeWord, saveData } from '@/infra/storage/storage';
 import { appReducer } from './reducer';
 import type { AppActions, AppContextValue } from './types';
@@ -35,7 +33,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function useApp(): AppContextValue {
   const context = useContext(AppContext);
-  if (!context) throw new Error('useApp 必须在 AppProvider 中使用');
+  if (!context) throw new Error('useApp must be used within AppProvider');
   return context;
 }
 
@@ -45,6 +43,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<AppContextValue['toasts']>([]);
   const dataRef = useRef(data);
   dataRef.current = data;
+  const locale = normalizeLocale(data.locale);
+  const t = useMemo(() => createT(locale), [locale]);
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const toastTimers = useRef<Map<string, number>>(new Map());
 
@@ -146,40 +148,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addWord = useCallback(
     (input: WordInput) => {
+      const tr = tRef.current;
       const normalized = normalizeWord(input);
-      if (!normalized) return { ok: false, message: '单词和释义不能为空' };
+      if (!normalized) return { ok: false, message: tr('actions.wordRequired') };
       const duplicate = dataRef.current.words.some(
         (word) => word.term.toLowerCase() === normalized.term.toLowerCase(),
       );
-      if (duplicate) return { ok: false, message: `「${normalized.term}」已经在词库中` };
+      if (duplicate) return { ok: false, message: tr('actions.duplicateWord', { term: normalized.term }) };
       dispatch({ type: 'ADD_WORD', input: normalized, now: Date.now() });
-      toast(`已加入「${normalized.term}」`, 'success');
-      return { ok: true, message: '已添加' };
+      toast(tr('actions.wordAdded', { term: normalized.term }), 'success');
+      return { ok: true, message: tr('actions.wordAdded', { term: normalized.term }) };
     },
     [toast],
   );
 
   const updateWord = useCallback(
     (id: string, input: Partial<WordInput>) => {
+      const tr = tRef.current;
       const target = dataRef.current.words.find((word) => word.id === id);
-      if (!target) return { ok: false, message: '单词不存在' };
+      if (!target) return { ok: false, message: tr('actions.wordNotFound') };
       const term = input.term ?? target.term;
       const duplicate = dataRef.current.words.some(
         (word) => word.id !== id && word.term.toLowerCase() === term.trim().toLowerCase(),
       );
-      if (duplicate) return { ok: false, message: `「${term}」已经在词库中` };
+      if (duplicate) return { ok: false, message: tr('actions.duplicateWord', { term }) };
       dispatch({ type: 'UPDATE_WORD', id, input });
-      toast('修改已保存', 'success');
-      return { ok: true, message: '已保存' };
+      toast(tr('actions.wordSaved'), 'success');
+      return { ok: true, message: tr('actions.wordSaved') };
     },
     [toast],
   );
 
   const deleteWord = useCallback(
     (id: string) => {
+      const tr = tRef.current;
       const word = dataRef.current.words.find((item) => item.id === id);
       dispatch({ type: 'DELETE_WORD', id });
-      toast(word ? `已删除「${word.term}」` : '已删除', 'success');
+      toast(word ? tr('actions.wordDeleted', { term: word.term }) : tr('common.delete'), 'success');
     },
     [toast],
   );
@@ -210,14 +215,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const addProvider = useCallback(
     (draft: ProviderDraft) => {
+      const tr = tRef.current;
       if (dataRef.current.providers.length >= MAX_PROVIDERS) {
-        return { ok: false, message: `最多保存 ${MAX_PROVIDERS} 份配置` };
+        return { ok: false, message: tr('actions.providerLimit', { max: MAX_PROVIDERS }) };
       }
-      if (!draft.defaultModel.trim()) return { ok: false, message: '请填写默认模型' };
+      if (!draft.defaultModel.trim()) return { ok: false, message: tr('actions.modelRequired') };
       const id = uid('p');
       dispatch({ type: 'ADD_PROVIDER', id, draft, now: Date.now() });
-      toast('模型配置已保存', 'success');
-      return { ok: true, message: '已保存', id };
+      toast(tr('actions.providerSaved'), 'success');
+      return { ok: true, message: tr('actions.providerSaved'), id };
     },
     [toast],
   );
@@ -228,9 +234,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteProvider = useCallback(
     (id: string) => {
+      const tr = tRef.current;
       const current = dataRef.current.providers.find((item) => item.id === id);
       dispatch({ type: 'DELETE_PROVIDER', id, now: Date.now() });
-      toast(current ? `已删除「${current.name}」` : '配置已删除', 'success');
+      toast(
+        current ? tr('actions.providerDeleted', { name: current.name || tr('settings.unnamedProfile') }) : tr('common.delete'),
+        'success',
+      );
     },
     [toast],
   );
@@ -243,22 +253,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_THEME', theme });
   }, []);
 
+  const setLocale = useCallback((next: AppLocale) => {
+    dispatch({ type: 'SET_LOCALE', locale: next });
+  }, []);
+
   const importBackup = useCallback(
     (next: AppData) => {
       dispatch({ type: 'IMPORT_DATA', data: next, now: Date.now() });
-      toast('备份已导入', 'success');
+      toast(tRef.current('actions.backupImported'), 'success');
     },
     [toast],
   );
 
   const resetAll = useCallback(() => {
     dispatch({ type: 'RESET_ALL', now: Date.now() });
-    toast('已恢复初始示例数据', 'success');
+    toast(tRef.current('actions.resetSample'), 'success');
   }, [toast]);
 
   const clearProgress = useCallback(() => {
     dispatch({ type: 'CLEAR_PROGRESS', now: Date.now() });
-    toast('学习进度已清空，词库与设置保留', 'success');
+    toast(tRef.current('actions.clearProgress'), 'success');
   }, [toast]);
 
   const setPracticeSession = useCallback((session: PracticeSessionState | null) => {
@@ -292,6 +306,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteProvider,
       setActiveProvider,
       setTheme,
+      setLocale,
       importBackup,
       resetAll,
       clearProgress,
@@ -312,6 +327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deleteProvider,
       setActiveProvider,
       setTheme,
+      setLocale,
       importBackup,
       resetAll,
       clearProgress,
@@ -328,5 +344,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [data, actions, toasts, dismissToast],
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider value={value}>
+      <I18nProvider locale={locale}>{children}</I18nProvider>
+    </AppContext.Provider>
+  );
 }

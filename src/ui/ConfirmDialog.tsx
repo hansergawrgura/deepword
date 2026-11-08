@@ -1,5 +1,6 @@
-import { Modal } from './Modal';
 import type { ReactNode } from 'react';
+import { useT } from '@/i18n';
+import { Modal } from './Modal';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -16,12 +17,13 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = '确认',
-  cancelLabel = '取消',
+  confirmLabel,
+  cancelLabel,
   danger = false,
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
+  const t = useT();
   return (
     <Modal
       open={open}
@@ -30,7 +32,7 @@ export function ConfirmDialog({
       footer={
         <>
           <button type="button" className="btn btn--quiet" onClick={onClose}>
-            {cancelLabel}
+            {cancelLabel ?? t('common.cancel')}
           </button>
           <button
             type="button"
@@ -40,7 +42,7 @@ export function ConfirmDialog({
               onClose();
             }}
           >
-            {confirmLabel}
+            {confirmLabel ?? t('common.confirm')}
           </button>
         </>
       }

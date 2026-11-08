@@ -1,11 +1,3 @@
-/**
- * 一轮练习状态机单测（vitest / node 环境）。
- *
- * 口径来源：docs/phase-b-contract.md 第 0 / 8 节。
- * 覆盖：会话构造的阶段与闸门、闸门「掌握 / 不认识」两条分支、新词与复习阶段的题量、
- * 作答写入与推进、轮次完成判定、小结统计与可恢复会话判定。
- */
-
 import { describe, expect, it } from 'vitest';
 import type {
   AppData,

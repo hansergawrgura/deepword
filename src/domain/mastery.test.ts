@@ -1,11 +1,3 @@
-/**
- * 掌握判定单测（vitest / node 环境）。
- *
- * 口径来源：docs/phase-b-contract.md 第 3 节。
- * 覆盖四条规则（连续 3 次全对 / 覆盖 ≥2 技能 / 14 天无错 / 分布 ≥2 轮次）各自的命中与不命中，
- * 缺 roundId 的旧作答合并为 legacy 轮次，以及 isMastered 对手动 / 规则两种来源的识别。
- */
-
 import { describe, expect, it } from 'vitest';
 import type { AppData, Attempt, MasteryRecord, Skill } from './types';
 import { emptyAppData } from './fixtures';
@@ -69,7 +61,7 @@ describe('evaluateMastery：四条规则', () => {
     const check = evaluateMastery(makeData(attempts), 'w1', NOW);
     expect(check.eligible).toBe(false);
     expect(check.streak).toBe(2);
-    expect(check.reasons.join('')).toContain('连续答对');
+    expect(check.reasons.join('')).toContain('correct in a row');
   });
 
   it('规则 1 遇错即止：最近一次答错打断连对', () => {
@@ -92,7 +84,7 @@ describe('evaluateMastery：四条规则', () => {
     const check = evaluateMastery(makeData(attempts), 'w1', NOW);
     expect(check.eligible).toBe(false);
     expect(check.skills).toEqual(['en2zh']);
-    expect(check.reasons.join('')).toContain('技能');
+    expect(check.reasons.join('')).toContain('skill');
   });
 
   it('规则 3（14 天无错）不满足：最近一次答错在 8 天前', () => {
@@ -106,7 +98,7 @@ describe('evaluateMastery：四条规则', () => {
     expect(check.streak).toBe(3);
     expect(check.errorFreeDays).toBe(8);
     expect(check.eligible).toBe(false);
-    expect(check.reasons.join('')).toContain('14 天');
+    expect(check.reasons.join('')).toMatch(/14/);
   });
 
   it('规则 3 从未答错时按首次练习作答算天数', () => {
@@ -118,7 +110,7 @@ describe('evaluateMastery：四条规则', () => {
     const check = evaluateMastery(makeData(attempts), 'w1', NOW);
     expect(check.errorFreeDays).toBe(5);
     expect(check.eligible).toBe(false);
-    expect(check.reasons.join('')).toContain('14 天');
+    expect(check.reasons.join('')).toMatch(/14/);
   });
 
   it('规则 4（分布 ≥2 轮次）不满足：3 次全对都在同一轮', () => {
@@ -130,7 +122,7 @@ describe('evaluateMastery：四条规则', () => {
     const check = evaluateMastery(makeData(attempts), 'w1', NOW);
     expect(check.roundIds).toEqual(['r1']);
     expect(check.eligible).toBe(false);
-    expect(check.reasons.join('')).toContain('轮次');
+    expect(check.reasons.join('')).toContain('round');
   });
 
   it('缺 roundId 的旧作答合并为一个 legacy 轮次', () => {
@@ -142,7 +134,7 @@ describe('evaluateMastery：四条规则', () => {
     const check = evaluateMastery(makeData(attempts), 'w1', NOW);
     expect(check.roundIds).toEqual([LEGACY_ROUND_ID]);
     expect(check.eligible).toBe(false);
-    expect(check.reasons.join('')).toContain('轮次');
+    expect(check.reasons.join('')).toContain('round');
   });
 
   it('legacy 作答与带 roundId 的作答算作两个轮次', () => {
@@ -173,7 +165,7 @@ describe('evaluateMastery：四条规则', () => {
     const check = evaluateMastery(makeData([]), 'w1', NOW);
     expect(check.eligible).toBe(false);
     expect(check.streak).toBe(0);
-    expect(check.reasons.join('')).toContain('练习作答');
+    expect(check.reasons.join('')).toContain('practice attempts');
   });
 
   it('无 skill 的旧题不参与掌握判定', () => {

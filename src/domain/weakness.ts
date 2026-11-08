@@ -1,18 +1,8 @@
-/**
- * Phase B 薄弱分析（6 个技能维度 + 最弱词）。
- *
- * 契约来源：docs/phase-b-contract.md 第 4 节。全部数据从作答记录现算，不落库：
- * - 只统计带 `skill` 的练习作答（互译用 `correct` 判定）；
- * - `skills` 固定 6 项，顺序同 practice.ts 的 SKILLS；
- * - `accuracy` 为 0~100 的整数，无作答时为 null；
- * - 薄弱度 = 错误次数 × 高权重 + 近期正确率低 + 最近作答久未复习；
- * - 掌握词不参与薄弱排名（它们不再需要复习）。
- *
- * 设计约束：纯函数、不读写 localStorage、不抛错；脏数据（缺 skill / 字段缺失 / 空词库）安全降级。
- */
-
+import type { Locale } from '@/i18n/types';
+import { DEFAULT_LOCALE } from '@/i18n/types';
+import { createT } from '@/i18n/t';
 import type { AppData, Attempt, Skill, Word } from './types';
-import { SKILLS, SKILL_META } from './practice';
+import { getSkillMeta, SKILLS } from './practice';
 import { percent } from './utils';
 
 export interface SkillStat {
@@ -117,6 +107,10 @@ function wordAttempts(data: AppData, wordId: string): Attempt[] {
   return practiceAttempts(data).filter((attempt) => attempt.wordId === wordId);
 }
 
+function skillDisplayLabel(skill: Skill, locale: Locale): string {
+  return getSkillMeta(skill, locale).label;
+}
+
 /* ------------------------------------------------------------------ */
 /* 公开 API                                                            */
 /* ------------------------------------------------------------------ */
@@ -127,11 +121,15 @@ function wordAttempts(data: AppData, wordId: string): Attempt[] {
  * @param data 应用数据（只读）
  * @param now 当前时间（毫秒）；用于截断时钟漂移导致的未来时间戳，缺省 Date.now()
  */
-export function getSkillStats(data: AppData, now?: number): SkillStat[] {
+export function getSkillStats(
+  data: AppData,
+  now?: number,
+  locale: Locale = DEFAULT_LOCALE,
+): SkillStat[] {
   const nowTs = normalizeNow(now);
   const stats: SkillStat[] = SKILLS.map((skill) => ({
     skill,
-    label: SKILL_META[skill]?.label ?? skill,
+    label: skillDisplayLabel(skill, locale),
     attempts: 0,
     correct: 0,
     accuracy: null,
@@ -166,15 +164,16 @@ export function getSkillStats(data: AppData, now?: number): SkillStat[] {
  */
 export function getWeaknessReport(
   data: AppData,
-  options: { limit?: number; now?: number } = {},
+  options: { limit?: number; now?: number; locale?: Locale } = {},
 ): WeaknessReport {
+  const locale = options.locale ?? DEFAULT_LOCALE;
   const nowTs = normalizeNow(options.now);
   const limit = normalizeLimit(options?.limit);
-  const skills = getSkillStats(data, nowTs);
+  const skills = getSkillStats(data, nowTs, locale);
   const practiced = skills.some((stat) => stat.attempts > 0);
   const weakestSkill = pickWeakestSkill(skills);
   const weakestWords = pickWeakWords(data, limit, nowTs);
-  const focus = buildFocus(skills, weakestSkill, weakestWords, practiced);
+  const focus = buildFocus(skills, weakestSkill, weakestWords, practiced, locale);
 
   return { skills, practiced, weakestSkill, weakestWords, focus };
 }
@@ -288,15 +287,17 @@ function pickWeakWords(data: AppData, limit: number, now: number): WeakWordStat[
   return result.slice(0, limit);
 }
 
-/** 生成一句中文建议重点。 */
+/** 生成一句建议重点（与仪表盘 weaknessFocusText 口径一致）。 */
 function buildFocus(
   skills: SkillStat[],
   weakestSkill: Skill | null,
   weakWords: WeakWordStat[],
   practiced: boolean,
+  locale: Locale,
 ): string {
+  const t = createT(locale);
   if (!practiced || !weakestSkill) {
-    return '还没有带技能标记的练习记录，先完成一轮练习（1 个新词 + 4~6 个复习词），就能看到你的薄弱项。';
+    return t('domain.weakness.noSkillAttempts');
   }
 
   const practicedStats = skills
@@ -311,30 +312,42 @@ function buildFocus(
 
   const weakest = practicedStats[0];
   if (!weakest) {
-    return '先完成一轮练习，我们就能告诉你该补哪一项。';
+    return t('domain.weakness.needOneRound');
   }
 
   if ((weakest.accuracy ?? 0) >= 100) {
-    return '各项技能正确率都不错，保持每天一轮的节奏，多认新词巩固即可。';
+    return t('domain.weakness.allGood');
   }
 
   const second = practicedStats[1];
   const weakestAcc = weakest.accuracy ?? 0;
-  // 次弱技能与最弱差距不大时一起点名，例：「听音与互译最弱」。
   const withSecond =
     Boolean(second) &&
     (second?.accuracy ?? 0) < 100 &&
     weakestAcc - (second?.accuracy ?? 0) <= 20;
 
-  const names = withSecond ? `${weakest.label}与${second?.label}` : weakest.label;
-  const parts: string[] = [`${names}最弱，先补 3 道${weakest.label}题`];
-  if (withSecond) parts.push(`再加练 2 道${second?.label}题`);
+  const pairJoin = locale === 'zh-CN' ? '与' : ' & ';
+  const names = withSecond
+    ? `${skillDisplayLabel(weakest.skill, locale)}${pairJoin}${skillDisplayLabel(second!.skill, locale)}`
+    : skillDisplayLabel(weakest.skill, locale);
+
+  let text = t('dashboard.focusWeakest', {
+    skills: names,
+    primary: skillDisplayLabel(weakest.skill, locale),
+  });
+  if (withSecond && second) {
+    text +=
+      t('dashboard.focusJoiner') +
+      t('dashboard.focusWeakestDual', { secondary: skillDisplayLabel(second.skill, locale) });
+  }
 
   const worstWord = weakWords[0];
   if (worstWord) {
-    const term = worstWord.word.term?.trim() || '这个词';
-    parts.push(`重点复习「${term}」（错 ${worstWord.wrongCount} 次）`);
+    const term = worstWord.word.term?.trim() || t('domain.practice.thisWord');
+    text +=
+      t('dashboard.focusJoiner') +
+      t('dashboard.focusWeakestWord', { term, count: worstWord.wrongCount });
   }
 
-  return `${parts.join('；')}。`;
+  return locale === 'zh-CN' ? `${text}。` : `${text}.`;
 }

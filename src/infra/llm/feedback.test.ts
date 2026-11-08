@@ -1,11 +1,3 @@
-/**
- * AI 讲解与互译判分单测（vitest / node 环境，全部 mock 全局 fetch）。
- *
- * 口径来源：docs/phase-b-contract.md 第 7 节。
- * 覆盖：VERDICT 协议行解析、「改进：」段提取、本地降级讲解与判分、鼓励语、
- * 未配置模型时的降级（不抛错），以及 mock `/api/llm/forward` 代理后的流式解析。
- */
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LLMSettings, Question, Word } from '@/domain/types';
 import {

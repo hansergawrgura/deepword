@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/app/store';
+import { useT } from '@/i18n';
 import type {
   PracticeResult,
   PracticeSessionState,
@@ -40,8 +41,6 @@ import { hasUsableLLMConfig, resolveActiveLLMSettings } from '@/infra/llm';
 import { cancelSpeech, speak as speakText, useEnglishVoices } from '@/infra/tts';
 import type { AnswerFeedbackState, AnswerPhase } from './types';
 
-const STUDY_HINT = '新词 → 复习 → 小结，一轮一轮往前走。';
-
 interface PendingRecord {
   wordId: string;
   skill: Skill;
@@ -57,6 +56,7 @@ interface PendingRecord {
 
 export function useStudyController() {
   const { data, actions } = useApp();
+  const t = useT();
   const [phase, setPhase] = useState<AnswerPhase>('idle');
   const [feedback, setFeedback] = useState<AnswerFeedbackState | null>(null);
   const [masteredThisRound, setMasteredThisRound] = useState<string | null>(null);
@@ -215,13 +215,13 @@ export function useStudyController() {
     let next = createSession(nextPlan, { roundNo: nextPlan.roundNo, now: Date.now() });
     if (!nextPlan.newWord) {
       if (nextPlan.reviewWords.length === 0) {
-        actions.toast('暂时没有可安排的词，先去词库添加或换个时候再来。', 'info');
+        actions.toast(t('study.toastNoWords'), 'info');
         actions.setPracticeSession(null);
         return;
       }
       next = startReviewStage(next, nextPlan.reviewWords, context);
       if ((next.questions?.length ?? 0) === 0) {
-        actions.toast('这一轮没有能出的题，先去词库补充词条信息吧。', 'info');
+        actions.toast(t('study.toastNoQuestions'), 'info');
         actions.setPracticeSession({ ...next, stage: 'done', questionIndex: 0 });
         return;
       }
@@ -230,7 +230,7 @@ export function useStudyController() {
     resetFeedback();
     setPlanVisible(false);
     actions.setPracticeSession(next);
-  }, [actions, context, data, resetFeedback]);
+  }, [actions, context, data, resetFeedback, t]);
 
   const resumeRound = useCallback(() => {
     resetFeedback();
@@ -614,22 +614,22 @@ export function useStudyController() {
   const gateFlipped = session?.gate === 'confirm';
 
   const stageLabel = planVisible
-    ? '本轮计划'
+    ? t('study.stagePlan')
     : stage === 'done'
-      ? '本轮小结'
+      ? t('study.stageSummary')
       : stage === 'gate'
-        ? '新词闸门'
+        ? t('study.stageGate')
         : stage === 'new'
-          ? '新词练习'
+          ? t('study.stageNew')
           : stage === 'review'
-            ? '复习'
-            : '本轮概览';
+            ? t('study.stageReview')
+            : t('study.stageOverview');
 
   const roundQuestions = session?.questions?.length ?? 0;
   const roundIndex = Math.min((session?.questionIndex ?? 0) + 1, Math.max(1, roundQuestions));
 
   return {
-    studyHint: STUDY_HINT,
+    studyHint: t('study.hint'),
     data,
     phase,
     feedback,

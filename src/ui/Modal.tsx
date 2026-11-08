@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useT } from '@/i18n';
 import { IconClose } from './icons';
 
 export interface ModalProps {
@@ -21,7 +22,6 @@ const FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-/** 通用弹窗：Esc 关闭、点击蒙层关闭、锁定页面滚动、焦点陷阱与关闭后焦点还原。 */
 export function Modal({
   open,
   onClose,
@@ -31,6 +31,7 @@ export function Modal({
   footer,
   size = 'default',
 }: ModalProps) {
+  const t = useT();
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -114,7 +115,7 @@ export function Modal({
             className="icon-btn"
             onClick={onClose}
             data-modal-close
-            aria-label="关闭"
+            aria-label={t('common.close')}
           >
             <IconClose size={18} />
           </button>

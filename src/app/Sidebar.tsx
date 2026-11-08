@@ -1,9 +1,10 @@
 import { useMemo, type JSX } from 'react';
 import { useApp } from '@/app/store';
+import { APP_VERSION } from '@/app/version';
 import type { ViewId } from '@/domain/types';
 import { getOverview } from '@/domain/stats';
 import { countAvailable } from '@/domain/rounds';
-import { APP_VERSION } from '@/app/version';
+import { useT } from '@/i18n';
 import {
   IconBook,
   IconCards,
@@ -23,21 +24,20 @@ interface SidebarProps {
 
 interface NavEntry {
   id: ViewId;
-  label: string;
-  shortLabel: string;
-  latin: string;
+  latinKey: string;
   icon: (props: IconProps) => JSX.Element;
 }
 
 const NAV: NavEntry[] = [
-  { id: 'dashboard', label: '今日', shortLabel: '今日', latin: 'TODAY', icon: IconHome },
-  { id: 'study', label: '学习', shortLabel: '学习', latin: 'STUDY', icon: IconCards },
-  { id: 'wordbook', label: '词库', shortLabel: '词库', latin: 'WORDBOOK', icon: IconBook },
-  { id: 'settings', label: '设置', shortLabel: '设置', latin: 'SETTINGS', icon: IconSliders },
+  { id: 'dashboard', latinKey: 'nav.latin.dashboard', icon: IconHome },
+  { id: 'study', latinKey: 'nav.latin.study', icon: IconCards },
+  { id: 'wordbook', latinKey: 'nav.latin.wordbook', icon: IconBook },
+  { id: 'settings', latinKey: 'nav.latin.settings', icon: IconSliders },
 ];
 
 export function Sidebar({ current, onNavigate }: SidebarProps) {
   const { data, actions } = useApp();
+  const t = useT();
   const overview = useMemo(() => getOverview(data), [data]);
 
   const badgeFor = (id: ViewId): number | undefined => {
@@ -51,29 +51,30 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
   };
 
   return (
-    <aside className="sidebar" aria-label="主导航">
+    <aside className="sidebar" aria-label={t('nav.mainNav')}>
       <button
         type="button"
         className="sidebar__brand"
         onClick={() => onNavigate('dashboard')}
-        aria-label="词渊 DeepWord 首页"
+        aria-label={t('brand.homeAria')}
       >
         <span className="sidebar__seal" aria-hidden="true">
-          渊
+          {t('brand.seal')}
         </span>
         <span className="sidebar__brand-text">
-          <span className="sidebar__name">词渊</span>
-          <span className="sidebar__latin">DEEPWORD</span>
+          <span className="sidebar__name">{t('brand.name')}</span>
+          <span className="sidebar__latin">{t('brand.latin')}</span>
         </span>
       </button>
 
-      <p className="sidebar__motto">以错题为师 · 以温故为舟</p>
+      <p className="sidebar__motto">{t('brand.motto')}</p>
 
-      <nav className="sidebar__nav" aria-label="页面">
+      <nav className="sidebar__nav" aria-label={t('nav.pages')}>
         {NAV.map((entry) => {
           const active = current === entry.id;
           const badge = badgeFor(entry.id);
           const Icon = entry.icon;
+          const label = t(`nav.${entry.id}`);
           return (
             <button
               key={entry.id}
@@ -86,9 +87,9 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
                 <Icon size={18} />
               </span>
               <span className="sidebar__nav-text">
-                <span className="sidebar__nav-label">{entry.label}</span>
-                <span className="sidebar__nav-label-short">{entry.shortLabel}</span>
-                <span className="sidebar__nav-latin">{entry.latin}</span>
+                <span className="sidebar__nav-label">{label}</span>
+                <span className="sidebar__nav-label-short">{label}</span>
+                <span className="sidebar__nav-latin">{t(entry.latinKey)}</span>
               </span>
               {badge !== undefined && badge > 0 && (
                 <span className={entry.id === 'study' ? 'sidebar__nav-badge is-accent' : 'sidebar__nav-badge'}>
@@ -103,9 +104,7 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
       <div className="sidebar__foot">
         <div className="sidebar__streak">
           <IconFlame size={15} />
-          <span>
-            连续 <strong>{overview.streak}</strong> 天
-          </span>
+          <span>{t('streak.days', { count: overview.streak })}</span>
           <span className="sidebar__streak-dot" aria-hidden="true" />
         </div>
 
@@ -113,18 +112,18 @@ export function Sidebar({ current, onNavigate }: SidebarProps) {
           type="button"
           className="sidebar__theme"
           onClick={() => actions.setTheme(data.theme === 'dark' ? 'light' : 'dark')}
-          aria-label={data.theme === 'dark' ? '切换到昼读模式' : '切换到夜读模式'}
+          aria-label={data.theme === 'dark' ? t('theme.switchToDay') : t('theme.switchToNight')}
         >
           {data.theme === 'dark' ? <IconSun size={15} /> : <IconMoon size={15} />}
-          <span>{data.theme === 'dark' ? '昼读' : '夜读'}</span>
+          <span>{data.theme === 'dark' ? t('theme.day') : t('theme.night')}</span>
           <span className="sidebar__theme-track" aria-hidden="true">
             <span className="sidebar__theme-knob" />
           </span>
         </button>
 
         <p className="sidebar__version">
-          <span>词渊 · v{APP_VERSION}</span>
-          <span>本地存储</span>
+          <span>{t('brand.versionLine', { version: APP_VERSION })}</span>
+          <span>{t('shell.localStorage')}</span>
         </p>
       </div>
     </aside>

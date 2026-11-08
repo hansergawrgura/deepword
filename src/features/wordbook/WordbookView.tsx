@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { BACKUP_APP, downloadWordlistName } from '@/app/identity';
 import { useApp } from '@/app/store';
+import { useLocale, useT } from '@/i18n';
 import type { Word, WordInput } from '@/domain/types';
-import { getWordProgressList, WORD_LEARNING_STATUS_META, type WordProgress } from '@/domain/stats';
+import { getWordProgressList, type WordProgress } from '@/domain/stats';
 import { relativeTime, truncate } from '@/domain/utils';
 import { normalizeWord } from '@/infra/storage/storage';
 import { Modal } from '@/ui/Modal';
@@ -21,21 +23,31 @@ type SortKey = 'recent' | 'alpha' | 'wrong' | 'activity';
 
 const PAGE_SIZE = 60;
 
-const FILTERS: Array<{ key: FilterKey; label: string }> = [
-  { key: 'all', label: '全部' },
-  { key: 'new', label: '新词' },
-  { key: 'learning', label: '学习中' },
-  { key: 'review', label: '复习中' },
-  { key: 'mastered', label: '已掌握' },
-  { key: 'mistakes', label: '错词' },
-];
+const FILTER_KEYS: FilterKey[] = ['all', 'new', 'learning', 'review', 'mastered', 'mistakes'];
+const SORT_KEYS: SortKey[] = ['recent', 'alpha', 'wrong', 'activity'];
 
-const SORTS: Array<{ key: SortKey; label: string }> = [
-  { key: 'recent', label: '最近添加' },
-  { key: 'alpha', label: '字母序' },
-  { key: 'wrong', label: '错误最多' },
-  { key: 'activity', label: '最近作答' },
-];
+const FILTER_I18N: Record<FilterKey, string> = {
+  all: 'wordbook.filterAll',
+  new: 'wordbook.filterNew',
+  learning: 'wordbook.filterLearning',
+  review: 'wordbook.filterReview',
+  mastered: 'wordbook.filterMastered',
+  mistakes: 'wordbook.filterMistakes',
+};
+
+const STATUS_TONE: Record<'new' | 'learning' | 'review' | 'mastered', 'muted' | 'vermilion' | 'gold' | 'sage'> = {
+  new: 'vermilion',
+  learning: 'gold',
+  review: 'sage',
+  mastered: 'sage',
+};
+
+const SORT_I18N: Record<SortKey, string> = {
+  recent: 'wordbook.sortRecent',
+  alpha: 'wordbook.sortAlpha',
+  wrong: 'wordbook.sortWrong',
+  activity: 'wordbook.sortActivity',
+};
 
 interface WordFormState {
   term: string;
@@ -82,6 +94,7 @@ interface WordEditorProps {
 }
 
 function WordEditor({ open, word, onClose }: WordEditorProps) {
+  const t = useT();
   const { actions } = useApp();
   const [form, setForm] = useState<WordFormState>(() => formFromWord(word));
   const [error, setError] = useState('');
@@ -100,11 +113,11 @@ function WordEditor({ open, word, onClose }: WordEditorProps) {
   const handleSubmit = () => {
     const input = formToInput(form);
     if (!input.term) {
-      setError('请填写单词');
+      setError(t('wordbook.validationTerm'));
       return;
     }
     if (!input.meaning) {
-      setError('请填写中文释义');
+      setError(t('wordbook.validationMeaning'));
       return;
     }
     const result = word ? actions.updateWord(word.id, input) : actions.addWord(input);
@@ -119,16 +132,16 @@ function WordEditor({ open, word, onClose }: WordEditorProps) {
     <Modal
       open={open}
       onClose={onClose}
-      title={word ? '编辑词条' : '添加词条'}
-      subtitle={word ? '修改只会影响这个词本身，学习记录会保留。' : '把一个新词收进你的词渊。'}
+      title={word ? t('wordbook.editorEdit') : t('wordbook.editorAdd')}
+      subtitle={word ? t('wordbook.editorSubEdit') : t('wordbook.editorSubAdd')}
       size="wide"
       footer={
         <>
           <button type="button" className="btn btn--quiet" onClick={onClose}>
-            取消
+            {t('common.cancel')}
           </button>
           <button type="button" className="btn btn--primary" onClick={handleSubmit}>
-            {word ? '保存修改' : '加入词库'}
+            {word ? t('wordbook.saveEdit') : t('wordbook.addToWordbook')}
           </button>
         </>
       }
@@ -142,22 +155,22 @@ function WordEditor({ open, word, onClose }: WordEditorProps) {
       >
         <div className="field-row">
           <label className="field">
-            <span className="label">单词 *</span>
+            <span className="label">{t('wordbook.fieldTerm')}</span>
             <input
               className="input"
               value={form.term}
               onChange={(event) => setField('term', event.target.value)}
-              placeholder="例如：serendipity"
+              placeholder={t('wordbook.placeholderTerm')}
               autoComplete="off"
             />
           </label>
           <label className="field">
-            <span className="label">音标</span>
+            <span className="label">{t('wordbook.fieldPhonetic')}</span>
             <input
               className="input"
               value={form.phonetic}
               onChange={(event) => setField('phonetic', event.target.value)}
-              placeholder="例如：/ˌserənˈdɪpəti/"
+              placeholder={t('wordbook.placeholderPhonetic')}
               autoComplete="off"
             />
           </label>
@@ -165,56 +178,56 @@ function WordEditor({ open, word, onClose }: WordEditorProps) {
 
         <div className="field-row">
           <label className="field">
-            <span className="label">词性</span>
+            <span className="label">{t('wordbook.fieldPos')}</span>
             <input
               className="input"
               value={form.partOfSpeech}
               onChange={(event) => setField('partOfSpeech', event.target.value)}
-              placeholder="例如：n. / v. / adj."
+              placeholder={t('wordbook.placeholderPos')}
               autoComplete="off"
             />
           </label>
           <label className="field">
-            <span className="label">标签</span>
+            <span className="label">{t('wordbook.fieldTags')}</span>
             <input
               className="input"
               value={form.tags}
               onChange={(event) => setField('tags', event.target.value)}
-              placeholder="用逗号分隔，例如：CET-6，核心"
+              placeholder={t('wordbook.placeholderTags')}
               autoComplete="off"
             />
           </label>
         </div>
 
         <label className="field">
-          <span className="label">中文释义 *</span>
+          <span className="label">{t('wordbook.fieldMeaning')}</span>
           <textarea
             className="textarea"
             value={form.meaning}
             onChange={(event) => setField('meaning', event.target.value)}
-            placeholder="多个义项用「；」分隔"
+            placeholder={t('wordbook.placeholderMeaning')}
             rows={2}
           />
         </label>
 
         <div className="field-row">
           <label className="field">
-            <span className="label">英文例句</span>
+            <span className="label">{t('wordbook.fieldExample')}</span>
             <textarea
               className="textarea"
               value={form.example}
               onChange={(event) => setField('example', event.target.value)}
-              placeholder="包含该词的完整例句，AI 出题时会参考"
+              placeholder={t('wordbook.placeholderExample')}
               rows={3}
             />
           </label>
           <label className="field">
-            <span className="label">例句翻译</span>
+            <span className="label">{t('wordbook.fieldExampleZh')}</span>
             <textarea
               className="textarea"
               value={form.exampleTranslation}
               onChange={(event) => setField('exampleTranslation', event.target.value)}
-              placeholder="例句的中文翻译"
+              placeholder={t('wordbook.placeholderExampleZh')}
               rows={3}
             />
           </label>
@@ -222,7 +235,7 @@ function WordEditor({ open, word, onClose }: WordEditorProps) {
 
         {error && <p className="field-error">{error}</p>}
         <button type="submit" className="sr-only" tabIndex={-1}>
-          提交
+          {t('common.submit')}
         </button>
       </form>
     </Modal>
@@ -235,6 +248,7 @@ interface ImportDialogProps {
 }
 
 function ImportDialog({ open, onClose }: ImportDialogProps) {
+  const t = useT();
   const { actions, data } = useApp();
   const [text, setText] = useState('');
   const [error, setError] = useState('');
@@ -248,7 +262,7 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
         : parsed && typeof parsed === 'object' && Array.isArray((parsed as { words?: unknown }).words)
           ? ((parsed as { words: unknown[] }).words ?? [])
           : null;
-      if (!list) throw new Error('需要一个单词数组，或包含 words 数组的对象');
+      if (!list) throw new Error(t('wordbook.errorNeedArray'));
       const inputs: WordInput[] = [];
       for (const item of list) {
         if (!item || typeof item !== 'object') continue;
@@ -257,9 +271,9 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
       }
       return { inputs, total: list.length };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : 'JSON 解析失败' };
+      return { error: err instanceof Error ? err.message : t('wordbook.errorJson') };
     }
-  }, [text]);
+  }, [text, t]);
 
   useEffect(() => {
     if (open) {
@@ -277,24 +291,24 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
       setFileName(file.name);
       setError('');
     } catch {
-      setError('读取文件失败');
+      setError(t('wordbook.errorFile'));
     }
   };
 
   const handleImport = () => {
     if (!preview || 'error' in preview) {
-      setError(preview && 'error' in preview ? (preview.error ?? '格式不正确') : '请先粘贴或选择 JSON');
+      setError(preview && 'error' in preview ? (preview.error ?? t('wordbook.errorFormat')) : t('wordbook.errorPaste'));
       return;
     }
     if (preview.inputs.length === 0) {
-      setError('没有识别到有效的单词（至少需要 term 和 meaning 字段）');
+      setError(t('wordbook.errorNoValid'));
       return;
     }
     const result = actions.importWords(preview.inputs);
     actions.toast(
       result.added > 0
-        ? `已导入 ${result.added} 个单词${result.skipped > 0 ? `，跳过 ${result.skipped} 个` : ''}`
-        : '没有新增单词（可能都已存在）',
+        ? t('wordbook.toastImported', { added: result.added, skippedSuffix: result.skipped > 0 ? t('wordbook.toastSkipped', { skipped: result.skipped }) : '' })
+        : t('wordbook.toastNone'),
       result.added > 0 ? 'success' : 'info',
     );
     if (result.added > 0) onClose();
@@ -306,13 +320,13 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
     <Modal
       open={open}
       onClose={onClose}
-      title="导入词库"
-      subtitle={`当前词库 ${currentCount} 个词。支持 JSON 数组，或包含 words 数组的对象。`}
+      title={t('wordbook.importTitle')}
+      subtitle={t('wordbook.importSubtitle', { count: currentCount })}
       size="wide"
       footer={
         <>
           <button type="button" className="btn btn--quiet" onClick={onClose}>
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -320,7 +334,7 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
             onClick={handleImport}
             disabled={!preview || 'error' in preview || preview.inputs.length === 0}
           >
-            导入 {preview && !('error' in preview) ? `${preview.inputs.length} 个` : ''}
+            {t('wordbook.importButton', { count: preview && !('error' in preview) ? preview.inputs.length : 0 })}
           </button>
         </>
       }
@@ -328,7 +342,7 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
       <div className="word-import">
         <label className="word-import__file">
           <IconUpload size={16} />
-          <span>{fileName || '选择 JSON 文件'}</span>
+          <span>{fileName || t('wordbook.pickJson')}</span>
           <input
             type="file"
             accept="application/json,.json"
@@ -340,7 +354,7 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
         </label>
 
         <label className="field">
-          <span className="label">或直接粘贴 JSON</span>
+          <span className="label">{t('wordbook.pasteJson')}</span>
           <textarea
             className="textarea word-import__textarea"
             value={text}
@@ -364,11 +378,11 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
           />
         </label>
 
-        {preview && 'error' in preview && <p className="field-error">格式错误：{preview.error}</p>}
+        {preview && 'error' in preview && <p className="field-error">{t('wordbook.formatError')}{preview.error}</p>}
         {preview && !('error' in preview) && (
           <div className="callout">
             <div>
-              <span className="callout__title">识别到 {preview.inputs.length} 个有效单词</span>
+              <span className="callout__title">{t('wordbook.previewValid', { count: preview.inputs.length })}</span>
               {preview.inputs.length > 0 && (
                 <p className="word-import__preview">
                   {preview.inputs
@@ -380,7 +394,7 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
               )}
               {preview.total > preview.inputs.length && (
                 <p className="word-import__preview">
-                  有 {preview.total - preview.inputs.length} 条缺少必要字段会被忽略。
+                  {t('wordbook.previewSkipped', { count: preview.total - preview.inputs.length })}
                 </p>
               )}
             </div>
@@ -390,7 +404,7 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
         {error && <p className="field-error">{error}</p>}
 
         <p className="hint">
-          导入时会自动去重；已存在的单词不会覆盖。字段说明：term、meaning 必填，其余可选。
+          {t('wordbook.importHint')}
         </p>
       </div>
     </Modal>
@@ -410,6 +424,8 @@ function downloadJson(filename: string, payload: unknown) {
 }
 
 export default function WordbookView() {
+  const t = useT();
+  const locale = useLocale();
   const { data, actions } = useApp();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
@@ -492,8 +508,8 @@ export default function WordbookView() {
   };
 
   const handleExport = () => {
-    downloadJson(`deepword-wordlist-${new Date().toISOString().slice(0, 10)}.json`, {
-      app: 'deepword',
+    downloadJson(downloadWordlistName(new Date().toISOString().slice(0, 10)), {
+      app: BACKUP_APP,
       kind: 'wordlist',
       exportedAt: new Date().toISOString(),
       words: data.words.map(({ term, phonetic, partOfSpeech, meaning, example, exampleTranslation, tags }) => ({
@@ -506,7 +522,7 @@ export default function WordbookView() {
         tags,
       })),
     });
-    actions.toast(`已导出 ${data.words.length} 个单词`, 'success');
+    actions.toast(t('wordbook.toastExported', { count: data.words.length }), 'success');
   };
 
   return (
@@ -515,26 +531,25 @@ export default function WordbookView() {
         <div>
           <div className="view-head__eyebrow">
             <span className="mono-label">WORDBOOK</span>
-            <span className="badge badge--outline">{data.words.length} 个词条</span>
+            <span className="badge badge--outline">{t('wordbook.badgeCount', { count: data.words.length })}</span>
           </div>
-          <h1 className="view-title">我的词库</h1>
+          <h1 className="view-title">{t('wordbook.title')}</h1>
           <p className="view-sub">
-            这里是你与单词相遇的地方。共 {data.words.length} 个词条，其中 {learned} 个已开始学习，
-            {counts.mistakes} 个曾在作答中失手。
+{t('wordbook.subtitle', { total: data.words.length, learned, mistakes: counts.mistakes })}
           </p>
         </div>
         <div className="view-actions">
           <button type="button" className="btn btn--ghost" onClick={() => setImportOpen(true)}>
             <IconUpload size={15} />
-            导入
+            {t('wordbook.import')}
           </button>
           <button type="button" className="btn btn--ghost" onClick={handleExport}>
             <IconDownload size={15} />
-            导出词库
+            {t('wordbook.export')}
           </button>
           <button type="button" className="btn btn--primary" onClick={openCreate}>
             <IconPlus size={15} />
-            添加单词
+            {t('wordbook.add')}
           </button>
         </div>
       </header>
@@ -546,41 +561,41 @@ export default function WordbookView() {
             type="search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="搜索单词、释义或标签…"
-            aria-label="搜索词库"
+            placeholder={t('wordbook.searchPlaceholder')}
+            aria-label={t('wordbook.searchAria')}
           />
           {search && (
             <button
               type="button"
               className="wordbook-search__clear"
               onClick={() => setSearch('')}
-              aria-label="清空搜索"
+              aria-label={t('wordbook.clearSearch')}
             >
               ×
             </button>
           )}
         </div>
 
-        <div className="wordbook-filters" role="group" aria-label="按学习状态筛选">
-          {FILTERS.map((item) => (
+        <div className="wordbook-filters" role="group" aria-label={t('wordbook.filterAria')}>
+          {FILTER_KEYS.map((key) => (
             <button
-              key={item.key}
+              key={key}
               type="button"
-              className={filter === item.key ? 'chip chip--active' : 'chip'}
-              onClick={() => setFilter(item.key)}
+              className={filter === key ? 'chip chip--active' : 'chip'}
+              onClick={() => setFilter(key)}
             >
-              {item.label}
-              <span className="wordbook-filters__count">{counts[item.key]}</span>
+              {t(FILTER_I18N[key])}
+              <span className="wordbook-filters__count">{counts[key]}</span>
             </button>
           ))}
         </div>
 
         <label className="wordbook-sort">
-          <span className="sr-only">排序方式</span>
+          <span className="sr-only">{t('wordbook.sortLabel')}</span>
           <select className="select" value={sort} onChange={(event) => setSort(event.target.value as SortKey)}>
-            {SORTS.map((item) => (
-              <option key={item.key} value={item.key}>
-                {item.label}
+            {SORT_KEYS.map((key) => (
+              <option key={key} value={key}>
+                {t(SORT_I18N[key])}
               </option>
             ))}
           </select>
@@ -589,28 +604,28 @@ export default function WordbookView() {
 
       {data.words.length === 0 ? (
         <div className="card empty-state wordbook-empty">
-          <span className="empty-state__mark">词</span>
-          <h2 className="empty-state__title">词库还是空的</h2>
+          <span className="empty-state__mark">{t('common.emptyMark')}</span>
+          <h2 className="empty-state__title">{t('wordbook.empty')}</h2>
           <p className="empty-state__desc">
-            添加第一个单词，或者导入一份自己的词表。学习记录会从你第一次翻开它开始。
+            {t('wordbook.emptyDesc')}
           </p>
           <div className="view-actions">
             <button type="button" className="btn btn--primary" onClick={openCreate}>
               <IconPlus size={15} />
-              添加单词
+              {t('wordbook.add')}
             </button>
             <button type="button" className="btn btn--ghost" onClick={() => setImportOpen(true)}>
               <IconUpload size={15} />
-              导入词库
+              {t('wordbook.import')}
             </button>
           </div>
         </div>
       ) : filtered.length === 0 ? (
         <div className="card empty-state wordbook-empty">
-          <span className="empty-state__mark">寻</span>
-          <h2 className="empty-state__title">没有找到匹配的词</h2>
+          <span className="empty-state__mark">…</span>
+          <h2 className="empty-state__title">{t('wordbook.noMatch')}</h2>
           <p className="empty-state__desc">
-            {hasFilters ? '换一个关键词或筛选条件试试。' : '词库中暂时没有内容。'}
+            {hasFilters ? t('wordbook.noMatchFilter') : t('wordbook.noMatchEmpty')}
           </p>
           {hasFilters && (
             <button
@@ -621,24 +636,26 @@ export default function WordbookView() {
                 setFilter('all');
               }}
             >
-              清除筛选
+              {t('wordbook.clearFilters')}
             </button>
           )}
         </div>
       ) : (
         <>
-          <div className="wordbook-table" role="table" aria-label="词库列表">
+          <div className="wordbook-table" role="table" aria-label={t('wordbook.tableAria')}>
             <div className="wordbook-table__head" role="row">
-              <span role="columnheader">词条</span>
-              <span role="columnheader">释义</span>
-              <span role="columnheader">状态</span>
-              <span role="columnheader">最近</span>
-              <span role="columnheader">错误</span>
-              <span role="columnheader" aria-label="操作" />
+              <span role="columnheader">{t('wordbook.colTerm')}</span>
+              <span role="columnheader">{t('wordbook.colMeaning')}</span>
+              <span role="columnheader">{t('wordbook.colStatus')}</span>
+              <span role="columnheader">{t('wordbook.colRecent')}</span>
+              <span role="columnheader">{t('wordbook.colWrong')}</span>
+              <span role="columnheader" aria-label={t('common.actions')} />
             </div>
 
             {shown.map(({ word, status: learningStatus, wrongCount, lastAttemptAt }: WordProgress) => {
-              const status = WORD_LEARNING_STATUS_META[learningStatus];
+              const statusLabel = t(`domain.status.${learningStatus}`);
+              const statusTone =
+                learningStatus === 'mastered' ? 'muted' : STATUS_TONE[learningStatus];
               return (
                 <div className="wordbook-row" role="row" key={word.id}>
                   <div className="wordbook-row__term" role="cell">
@@ -665,24 +682,24 @@ export default function WordbookView() {
                     <div className="wordbook-row__status" role="cell">
                       <span
                         className={
-                          status.tone === 'muted'
+                          statusTone === 'muted'
                             ? 'badge'
-                            : `badge badge--${status.tone} badge--dot`
+                            : `badge badge--${statusTone} badge--dot`
                         }
                       >
-                        {status.label}
+                        {statusLabel}
                       </span>
                     </div>
 
                     <div className="wordbook-row__due" role="cell">
                       {learningStatus === 'new' || !lastAttemptAt
-                        ? '未开始'
-                        : relativeTime(lastAttemptAt)}
+                        ? t('wordbook.notStarted')
+                        : relativeTime(lastAttemptAt, Date.now(), locale)}
                     </div>
 
                     <div className="wordbook-row__wrong" role="cell">
                       {wrongCount > 0 ? (
-                        <span className="badge badge--vermilion">错 {wrongCount}</span>
+                        <span className="badge badge--vermilion">{t('dashboard.wrongCount', { count: wrongCount })}</span>
                       ) : (
                         <span className="u-muted">—</span>
                       )}
@@ -693,7 +710,7 @@ export default function WordbookView() {
                     <button
                       type="button"
                       className="icon-btn"
-                      aria-label={`编辑 ${word.term}`}
+                      aria-label={t('wordbook.editAria', { term: word.term })}
                       onClick={() => openEdit(word)}
                     >
                       <IconEdit size={15} />
@@ -701,7 +718,7 @@ export default function WordbookView() {
                     <button
                       type="button"
                       className="icon-btn wordbook-row__delete"
-                      aria-label={`删除 ${word.term}`}
+                      aria-label={t('wordbook.deleteAria', { term: word.term })}
                       onClick={() => setDeleting(word)}
                     >
                       <IconTrash size={15} />
@@ -714,8 +731,8 @@ export default function WordbookView() {
 
           <div className="wordbook-foot">
             <span>
-              显示 {shown.length} / {filtered.length} 个词条
-              {hasFilters ? `（共 ${data.words.length} 个）` : ''}
+              {t('wordbook.shown', { shown: shown.length, filtered: filtered.length, totalSuffix: '' })}
+              {hasFilters ? t('wordbook.totalSuffix', { total: data.words.length }) : ''}
             </span>
             {visible < filtered.length && (
               <button
@@ -723,7 +740,7 @@ export default function WordbookView() {
                 className="btn btn--ghost btn--sm"
                 onClick={() => setVisible((current) => current + PAGE_SIZE)}
               >
-                加载更多
+                {t('common.loadMore')}
               </button>
             )}
           </div>
@@ -734,14 +751,9 @@ export default function WordbookView() {
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
       <ConfirmDialog
         open={Boolean(deleting)}
-        title="删除这个单词？"
-        message={
-          <>
-            将从词库中移除「<strong>{deleting?.term}</strong>」，同时清除它的学习卡片、错题记录与作答历史。
-            此操作不可撤销。
-          </>
-        }
-        confirmLabel="删除"
+        title={t('wordbook.deleteTitle')}
+        message={t('wordbook.deleteMessage', { term: deleting?.term ?? '' })}
+        confirmLabel={t('common.delete')}
         danger
         onClose={() => setDeleting(undefined)}
         onConfirm={() => {

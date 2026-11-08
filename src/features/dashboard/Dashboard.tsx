@@ -1,5 +1,6 @@
 import { useApp } from '@/app/store';
 import type { ViewProps } from '@/domain/types';
+import type { Skill } from '@/domain/types';
 import {
   DAILY_GOAL,
   getHeatmap,
@@ -8,11 +9,14 @@ import {
   getRecentActivity,
   getWeakWords,
 } from '@/domain/stats';
-import { WORD_LEARNING_STATUS_META } from '@/domain/stats';
 import { countAvailable } from '@/domain/rounds';
 import { hasResumableSession } from '@/domain/practiceRound';
 import { getWeaknessReport } from '@/domain/weakness';
+import type { WeaknessReport } from '@/domain/weakness';
+import { SKILLS } from '@/domain/practice';
 import { percent, relativeTime, truncate, weekdayName } from '@/domain/utils';
+import { useLocale, useT } from '@/i18n';
+import type { TranslateFn } from '@/i18n';
 import {
   IconArrowRight,
   IconCards,
@@ -23,17 +27,71 @@ import {
 } from '@/ui/icons';
 import './Dashboard.css';
 
-function greeting(now: Date): string {
+function greeting(t: TranslateFn, now: Date): string {
   const hour = now.getHours();
-  if (hour < 5) return '夜深了';
-  if (hour < 11) return '晨光正好';
-  if (hour < 14) return '午后小憩';
-  if (hour < 18) return '日影西斜';
-  return '灯下夜读';
+  if (hour < 5) return t('dashboard.greetingLateNight');
+  if (hour < 11) return t('dashboard.greetingMorning');
+  if (hour < 14) return t('dashboard.greetingNoon');
+  if (hour < 18) return t('dashboard.greetingAfternoon');
+  return t('dashboard.greetingEvening');
 }
 
 function compactDate(now: Date): string {
   return `${now.getFullYear()}.${`${now.getMonth() + 1}`.padStart(2, '0')}.${`${now.getDate()}`.padStart(2, '0')}`;
+}
+
+function skillLabel(t: TranslateFn, skill: Skill): string {
+  return t(`domain.skill.${skill}.label`);
+}
+
+function weaknessFocusText(t: TranslateFn, report: WeaknessReport, locale: string): string {
+  if (!report.practiced || !report.weakestSkill) {
+    return t('domain.weakness.noSkillAttempts');
+  }
+
+  const practicedStats = report.skills
+    .filter((stat) => stat.attempts > 0 && stat.accuracy !== null)
+    .sort((a, b) => {
+      const accA = a.accuracy ?? 0;
+      const accB = b.accuracy ?? 0;
+      if (accA !== accB) return accA - accB;
+      if (a.attempts !== b.attempts) return a.attempts - b.attempts;
+      return SKILLS.indexOf(a.skill) - SKILLS.indexOf(b.skill);
+    });
+
+  const weakest = practicedStats[0];
+  if (!weakest) return t('domain.weakness.needOneRound');
+  if ((weakest.accuracy ?? 0) >= 100) return t('domain.weakness.allGood');
+
+  const second = practicedStats[1];
+  const weakestAcc = weakest.accuracy ?? 0;
+  const withSecond =
+    Boolean(second) &&
+    (second?.accuracy ?? 0) < 100 &&
+    weakestAcc - (second?.accuracy ?? 0) <= 20;
+
+  const pairJoin = locale === 'zh-CN' ? '与' : ' & ';
+  const names = withSecond
+    ? `${skillLabel(t, weakest.skill)}${pairJoin}${skillLabel(t, second!.skill)}`
+    : skillLabel(t, weakest.skill);
+
+  let text = t('dashboard.focusWeakest', {
+    skills: names,
+    primary: skillLabel(t, weakest.skill),
+  });
+  if (withSecond && second) {
+    text +=
+      t('dashboard.focusJoiner') +
+      t('dashboard.focusWeakestDual', { secondary: skillLabel(t, second.skill) });
+  }
+  const worstWord = report.weakestWords[0];
+  if (worstWord) {
+    const term = worstWord.word.term?.trim() || t('domain.practice.thisWord');
+    text +=
+      t('dashboard.focusJoiner') +
+      t('dashboard.focusWeakestWord', { term, count: worstWord.wrongCount });
+  }
+  return locale === 'zh-CN' ? `${text}。` : `${text}.`;
 }
 
 /** 正确率分档：用于细横条配色（弱 → 中 → 强）。 */
@@ -46,6 +104,8 @@ function accuracyTone(accuracy: number | null): 'none' | 'weak' | 'mid' | 'stron
 
 export default function Dashboard({ navigate }: ViewProps) {
   const { data } = useApp();
+  const t = useT();
+  const locale = useLocale();
   const now = new Date();
   const nowTs = now.getTime();
   const overview = getOverview(data, nowTs);
@@ -58,12 +118,15 @@ export default function Dashboard({ navigate }: ViewProps) {
   const weakestStat = weakness.weakestSkill
     ? weakness.skills.find((item) => item.skill === weakness.weakestSkill)
     : undefined;
-  // 上一轮没做完时，入口文案改为「继续上一轮」。
   const resumable = hasResumableSession(data);
-  const roundActionLabel = resumable ? '继续上一轮' : '开始本轮学习';
+  const roundActionLabel = resumable ? t('dashboard.resumeRound') : t('dashboard.startRound');
   const pending = available.reviewWords + available.newWords;
-  const monthLabel = `${now.getMonth() + 1} 月`;
+  const monthLabel =
+    locale === 'zh-CN'
+      ? `${now.getMonth() + 1}${t('dashboard.monthSuffix')}`
+      : now.toLocaleDateString(locale, { month: 'long' });
   const hasLearned = overview.learnedWords > 0;
+  const focusText = weaknessFocusText(t, weakness, locale);
 
   return (
     <div className="dash">
@@ -73,26 +136,23 @@ export default function Dashboard({ navigate }: ViewProps) {
             <span className="mono-label">DASHBOARD</span>
             <span className="dash-header__rule" aria-hidden="true" />
             <span className="dash-header__date">
-              {compactDate(now)} · {weekdayName(nowTs)}
+              {compactDate(now)} · {weekdayName(nowTs, locale)}
             </span>
           </div>
           <h1 className="dash-title">
-            {greeting(now)}，<em>宜温故</em>
+            {greeting(t, now)}，<em>{t('dashboard.greetingEm')}</em>
           </h1>
-          <p className="dash-intro">
-            错词不是负担，而是下一次记住的线索。今天有{' '}
-            <strong className="u-vermilion">{pending}</strong> 个词等你过一遍。
-          </p>
+          <p className="dash-intro">{t('dashboard.intro', { pending })}</p>
         </div>
         <div className="dash-stamp" aria-hidden="true">
-          <span className="dash-stamp__word">今日</span>
+          <span className="dash-stamp__word">{t('dashboard.stampToday')}</span>
           <span className="dash-stamp__date">
             {now.getMonth() + 1}/{now.getDate()}
           </span>
         </div>
       </header>
 
-      <section className="dash-stats" aria-label="学习概览">
+      <section className="dash-stats" aria-label={t('dashboard.overview')}>
         <article className="dash-stat">
           <div className="dash-stat__top">
             <span className="mono-label">REVIEW</span>
@@ -100,9 +160,13 @@ export default function Dashboard({ navigate }: ViewProps) {
           </div>
           <div className="dash-stat__value">
             {available.reviewWords}
-            <span className="dash-stat__unit">个</span>
+            {t('dashboard.statUnitWords') ? (
+              <span className="dash-stat__unit">{t('dashboard.statUnitWords')}</span>
+            ) : null}
           </div>
-          <p className="dash-stat__label">待复习 · 按薄弱度 · 新词 {available.newWords} 个</p>
+          <p className="dash-stat__label">
+            {t('dashboard.dueReview', { newWords: available.newWords })}
+          </p>
         </article>
         <article className="dash-stat">
           <div className="dash-stat__top">
@@ -111,10 +175,12 @@ export default function Dashboard({ navigate }: ViewProps) {
           </div>
           <div className="dash-stat__value">
             {overview.todayReviewed}
-            <span className="dash-stat__unit">次</span>
+            {t('dashboard.statUnitTimes') ? (
+              <span className="dash-stat__unit">{t('dashboard.statUnitTimes')}</span>
+            ) : null}
           </div>
           <p className="dash-stat__label">
-            今日已学 · 目标 {DAILY_GOAL} 次
+            {t('dashboard.todayStudied', { goal: DAILY_GOAL })}
             <span className="dash-stat__mini">
               <span style={{ width: `${overview.todayProgress}%` }} />
             </span>
@@ -132,8 +198,12 @@ export default function Dashboard({ navigate }: ViewProps) {
             {overview.accuracy7 !== null && <span className="dash-stat__unit">%</span>}
           </div>
           <p className="dash-stat__label">
-            近七日正确率 · 今日{' '}
-            {overview.todayAccuracy === null ? '尚无作答' : `${overview.todayAccuracy}%`}
+            {t('dashboard.accuracy7', {
+              todayAccuracy:
+                overview.todayAccuracy === null
+                  ? t('dashboard.noAttempts')
+                  : `${overview.todayAccuracy}%`,
+            })}
           </p>
         </article>
         <article className="dash-stat">
@@ -143,10 +213,13 @@ export default function Dashboard({ navigate }: ViewProps) {
           </div>
           <div className="dash-stat__value">
             {overview.streak}
-            <span className="dash-stat__unit">天</span>
+            {locale === 'zh-CN' ? <span className="dash-stat__unit">{t('dashboard.streakUnit')}</span> : null}
           </div>
           <p className="dash-stat__label">
-            连续学习 · {overview.todayReviewed > 0 ? '今日已打卡' : '今天还未开始'}
+            {t('dashboard.streakLabel', {
+              checkedIn:
+                overview.todayReviewed > 0 ? t('dashboard.checkedIn') : t('dashboard.notStarted'),
+            })}
           </p>
         </article>
       </section>
@@ -155,19 +228,18 @@ export default function Dashboard({ navigate }: ViewProps) {
         <div className="dash-grid__main">
           <section className="dash-hero">
             <span className="dash-hero__watermark" aria-hidden="true">
-              温
+              {t('dashboard.watermarkWarm')}
             </span>
             <div className="dash-hero__content">
               <span className="mono-label">TODAY&apos;S RITUAL</span>
-              <h2 className="dash-hero__title">翻一页，记一页</h2>
-              <p className="dash-hero__desc">
-                先温习到期的旧词，再认识几个新词。答错的词会按薄弱度排进下一轮，优先再练一遍。
-              </p>
+              <h2 className="dash-hero__title">{t('dashboard.heroTitle')}</h2>
+              <p className="dash-hero__desc">{t('dashboard.heroDesc')}</p>
 
               <div className="dash-hero__progress">
                 <div className="u-between">
                   <span>
-                    今日进度 <strong>{overview.todayReviewed}</strong> / {DAILY_GOAL}
+                    {t('dashboard.todayProgress')}{' '}
+                    <strong>{overview.todayReviewed}</strong> / {DAILY_GOAL}
                   </span>
                   <span>{overview.todayProgress}%</span>
                 </div>
@@ -187,20 +259,18 @@ export default function Dashboard({ navigate }: ViewProps) {
                 </button>
               </div>
 
-              {resumable && (
-                <p className="dash-hero__resume">上一轮还没做完，接着往下走。</p>
-              )}
+              {resumable && <p className="dash-hero__resume">{t('dashboard.resumeHint')}</p>}
             </div>
 
-            <div className="dash-hero__tally" aria-label="待学与连击">
+            <div className="dash-hero__tally" aria-label={t('dashboard.tallyAria')}>
               <div className="dash-hero__tally-item">
                 <strong>{pending}</strong>
-                <span>个待学</span>
+                <span>{t('dashboard.pendingUnit')}</span>
               </div>
               <div className="dash-hero__tally-rule" aria-hidden="true" />
               <div className="dash-hero__tally-item">
                 <strong>{overview.streak}</strong>
-                <span>天连续</span>
+                <span>{t('dashboard.streakUnit')}</span>
               </div>
             </div>
           </section>
@@ -208,30 +278,32 @@ export default function Dashboard({ navigate }: ViewProps) {
           <section className="dash-panel dash-heat">
             <header className="dash-panel__head">
               <div>
-                <h2 className="dash-panel__title">温故有痕</h2>
-                <p className="dash-panel__sub">近 28 天的学习记录，每一格都是一次相遇。</p>
+                <h2 className="dash-panel__title">{t('dashboard.heatTitle')}</h2>
+                <p className="dash-panel__sub">{t('dashboard.heatSub')}</p>
               </div>
-              <span className="badge badge--sage badge--dot">连续 {overview.streak} 天</span>
+              <span className="badge badge--sage badge--dot">
+                {t('dashboard.streakBadge', { count: overview.streak })}
+              </span>
             </header>
-            <div className="dash-heat__grid" role="img" aria-label="近 28 天学习热力图">
+            <div className="dash-heat__grid" role="img" aria-label={t('dashboard.heatAria')}>
               {heatmap.map((cell) => (
                 <span
                   key={cell.key}
                   className="dash-heat__cell"
                   data-level={cell.level}
-                  title={`${cell.key} · ${cell.reviewed} 次学习`}
+                  title={t('dashboard.heatCell', { date: cell.key, count: cell.reviewed })}
                 />
               ))}
             </div>
             <div className="dash-heat__foot">
-              <span>{monthLabel} · 共 28 天</span>
+              <span>{t('dashboard.heatFoot', { month: monthLabel })}</span>
               <div className="dash-heat__legend" aria-hidden="true">
-                <span>少</span>
+                <span>{t('dashboard.less')}</span>
                 <span className="dash-heat__cell" data-level={1} />
                 <span className="dash-heat__cell" data-level={2} />
                 <span className="dash-heat__cell" data-level={3} />
                 <span className="dash-heat__cell" data-level={4} />
-                <span>多</span>
+                <span>{t('dashboard.more')}</span>
               </div>
             </div>
           </section>
@@ -239,16 +311,16 @@ export default function Dashboard({ navigate }: ViewProps) {
           <section className="dash-panel">
             <header className="dash-panel__head">
               <div>
-                <h2 className="dash-panel__title">最近动静</h2>
-                <p className="dash-panel__sub">每一次作答，都在改写记忆的曲线。</p>
+                <h2 className="dash-panel__title">{t('dashboard.recentTitle')}</h2>
+                <p className="dash-panel__sub">{t('dashboard.recentSub')}</p>
               </div>
             </header>
             {activities.length === 0 ? (
               <div className="dash-inline-empty">
-                <IconLeafMark />
+                <IconLeafMark label={t('common.emptyMark')} />
                 <div>
-                  <p>还没有学习记录</p>
-                  <span>从第一张闪卡开始，让今天留一点痕迹。</span>
+                  <p>{t('dashboard.recentEmpty')}</p>
+                  <span>{t('dashboard.recentEmptyHint')}</span>
                 </div>
               </div>
             ) : (
@@ -261,14 +333,16 @@ export default function Dashboard({ navigate }: ViewProps) {
                       <IconSparkle size={15} />
                     </span>
                     <div className="dash-recent__body">
-                      <strong>{word?.term ?? '已删除的词'}</strong>
+                      <strong>{word?.term ?? t('dashboard.deletedWord')}</strong>
                       <span>
-                        练习题 ·{' '}
-                        {relativeTime(attempt.createdAt, nowTs)}
+                        {t('dashboard.practiceLine')}{' '}
+                        {relativeTime(attempt.createdAt, nowTs, locale)}
                       </span>
                     </div>
-                    <span className={`dash-recent__result ${attempt.correct ? 'is-correct' : 'is-wrong'}`}>
-                      {attempt.correct ? '对' : '错'}
+                    <span
+                      className={`dash-recent__result ${attempt.correct ? 'is-correct' : 'is-wrong'}`}
+                    >
+                      {attempt.correct ? t('common.correct') : t('common.wrong')}
                     </span>
                   </li>
                 ))}
@@ -281,17 +355,19 @@ export default function Dashboard({ navigate }: ViewProps) {
           <section className="dash-panel dash-weak">
             <header className="dash-panel__head">
               <div>
-                <h2 className="dash-panel__title">错题待攻克</h2>
-                <p className="dash-panel__sub">最该再练一遍的几个词。</p>
+                <h2 className="dash-panel__title">{t('dashboard.mistakesTitle')}</h2>
+                <p className="dash-panel__sub">{t('dashboard.mistakesSub')}</p>
               </div>
             </header>
 
             {weakWords.length === 0 ? (
               <div className="dash-inline-empty">
-                <IconLeafMark />
+                <IconLeafMark label={t('common.emptyMark')} />
                 <div>
-                  <p>{hasLearned ? '错题本还是空的' : '还没有开始学习'}</p>
-                  <span>{hasLearned ? '保持这样的手感。' : '答错的词会在这里排队，下一轮优先复习。'}</span>
+                  <p>{hasLearned ? t('dashboard.mistakesEmptyClear') : t('dashboard.mistakesEmptyNew')}</p>
+                  <span>
+                    {hasLearned ? t('dashboard.weakestClear') : t('dashboard.mistakesQueueHint')}
+                  </span>
                 </div>
               </div>
             ) : (
@@ -303,18 +379,22 @@ export default function Dashboard({ navigate }: ViewProps) {
                         type="button"
                         className="dash-weak__row"
                         onClick={() => navigate('study')}
-                        title={`去复习「${word.term}」`}
+                        title={t('dashboard.reviewWord', { term: word.term })}
                       >
                         <span className="dash-weak__term">{word.term}</span>
                         <span className="dash-weak__meaning">{truncate(word.meaning, 26)}</span>
                         <span className="dash-weak__meta">
-                          <span className="badge badge--vermilion">错 {wrongCount}</span>
+                          <span className="badge badge--vermilion">
+                            {t('dashboard.wrongCount', { count: wrongCount })}
+                          </span>
                           {accuracy !== null && (
                             <span className="dash-weak__accuracy">{accuracy}%</span>
                           )}
                         </span>
                         {mistake?.correctStreak ? (
-                          <span className="dash-weak__streak">已连对 {mistake.correctStreak}</span>
+                          <span className="dash-weak__streak">
+                            {t('dashboard.correctStreak', { count: mistake.correctStreak })}
+                          </span>
                         ) : null}
                       </button>
                     </li>
@@ -326,7 +406,7 @@ export default function Dashboard({ navigate }: ViewProps) {
                   onClick={() => navigate('study')}
                 >
                   <IconArrowRight size={15} />
-                  去复习这些词
+                  {t('dashboard.reviewThese')}
                 </button>
               </>
             )}
@@ -335,11 +415,13 @@ export default function Dashboard({ navigate }: ViewProps) {
           <section className="dash-panel dash-weakness">
             <header className="dash-panel__head">
               <div>
-                <h2 className="dash-panel__title">薄弱分析</h2>
-                <p className="dash-panel__sub">六个技能各练了多少、错在哪里，一眼看清。</p>
+                <h2 className="dash-panel__title">{t('dashboard.weaknessTitle')}</h2>
+                <p className="dash-panel__sub">{t('dashboard.weaknessSub')}</p>
               </div>
               {weakness.practiced && weakestStat ? (
-                <span className="badge badge--vermilion">最弱 · {weakestStat.label}</span>
+                <span className="badge badge--vermilion">
+                  {t('dashboard.weakest', { skill: skillLabel(t, weakestStat.skill) })}
+                </span>
               ) : null}
             </header>
 
@@ -352,25 +434,30 @@ export default function Dashboard({ navigate }: ViewProps) {
                       className="dash-weakness__skill"
                       data-tone={accuracyTone(stat.accuracy)}
                       data-weakest={stat.skill === weakness.weakestSkill ? 'true' : 'false'}
-                      title={`${stat.label} · ${stat.attempts} 次作答`}
+                      title={t('dashboard.skillTitle', {
+                        skill: skillLabel(t, stat.skill),
+                        attempts: stat.attempts,
+                      })}
                     >
-                      <span className="dash-weakness__skill-label">{stat.label}</span>
+                      <span className="dash-weakness__skill-label">{skillLabel(t, stat.skill)}</span>
                       <span className="dash-weakness__skill-bar" aria-hidden="true">
                         <span style={{ width: `${stat.accuracy ?? 0}%` }} />
                       </span>
                       <span className="dash-weakness__skill-acc">
                         {stat.accuracy === null ? '—' : `${stat.accuracy}%`}
                       </span>
-                      <span className="dash-weakness__skill-count">{stat.attempts} 次</span>
+                      <span className="dash-weakness__skill-count">
+                        {t('dashboard.attemptsCount', { count: stat.attempts })}
+                      </span>
                     </li>
                   ))}
                 </ul>
 
                 <div className="dash-weakness__split">
                   <div className="dash-weakness__words">
-                    <h3 className="dash-weakness__subtitle">最该重练的词</h3>
+                    <h3 className="dash-weakness__subtitle">{t('dashboard.weakestWords')}</h3>
                     {weakness.weakestWords.length === 0 ? (
-                      <p className="dash-weakness__note">暂时没有明显失手的词，保持这个手感。</p>
+                      <p className="dash-weakness__note">{t('dashboard.weakestClear')}</p>
                     ) : (
                       <ul className="dash-weakness__word-list">
                         {weakness.weakestWords.slice(0, 5).map((item) => (
@@ -379,14 +466,16 @@ export default function Dashboard({ navigate }: ViewProps) {
                               type="button"
                               className="dash-weakness__word"
                               onClick={() => navigate('wordbook')}
-                              title={`在词库里查看「${item.word.term}」`}
+                              title={t('dashboard.viewInWordbook', { term: item.word.term })}
                             >
                               <span className="dash-weakness__word-term">{item.word.term}</span>
                               <span className="dash-weakness__word-meaning">
                                 {truncate(item.word.meaning, 24)}
                               </span>
                               <span className="dash-weakness__word-meta">
-                                <span className="badge badge--vermilion">错 {item.wrongCount}</span>
+                                <span className="badge badge--vermilion">
+                                  {t('dashboard.wrongCount', { count: item.wrongCount })}
+                                </span>
                                 <span className="dash-weakness__word-acc">
                                   {item.accuracy === null ? '—' : `${item.accuracy}%`}
                                 </span>
@@ -399,17 +488,17 @@ export default function Dashboard({ navigate }: ViewProps) {
                   </div>
 
                   <p className="dash-weakness__focus">
-                    <span className="dash-weakness__focus-label">建议重点</span>
-                    <span className="dash-weakness__focus-text">{weakness.focus}</span>
+                    <span className="dash-weakness__focus-label">{t('dashboard.focusLabel')}</span>
+                    <span className="dash-weakness__focus-text">{focusText}</span>
                   </p>
                 </div>
               </>
             ) : (
               <div className="dash-inline-empty dash-weakness__empty">
-                <IconLeafMark />
+                <IconLeafMark label={t('common.emptyMark')} />
                 <div>
-                  <p>还没有练习记录</p>
-                  <span>完成一轮练习后，这里会告诉你 6 个技能各弱在哪。</span>
+                  <p>{t('dashboard.weaknessEmpty')}</p>
+                  <span>{t('dashboard.weaknessEmptyDesc')}</span>
                 </div>
                 <button
                   type="button"
@@ -426,8 +515,8 @@ export default function Dashboard({ navigate }: ViewProps) {
           <section className="dash-panel">
             <header className="dash-panel__head">
               <div>
-                <h2 className="dash-panel__title">词库掌握</h2>
-                <p className="dash-panel__sub">从遗遇到熟识，各自有它的节奏。</p>
+                <h2 className="dash-panel__title">{t('dashboard.masteryTitle')}</h2>
+                <p className="dash-panel__sub">{t('dashboard.masterySub')}</p>
               </div>
             </header>
 
@@ -448,7 +537,7 @@ export default function Dashboard({ navigate }: ViewProps) {
                 <div key={status} className="dash-mastery__legend-item">
                   <dt>
                     <span className={`dash-mastery__dot is-${status}`} aria-hidden="true" />
-                    {WORD_LEARNING_STATUS_META[status].label}
+                    {t(`domain.status.${status}`)}
                   </dt>
                   <dd>{mastery[status]}</dd>
                 </div>
@@ -456,9 +545,9 @@ export default function Dashboard({ navigate }: ViewProps) {
             </dl>
 
             <div className="dash-mastery__total">
-              <span>词库共 {overview.totalWords} 个词条</span>
+              <span>{t('dashboard.masteryTotal', { count: overview.totalWords })}</span>
               <button type="button" className="dash-link" onClick={() => navigate('wordbook')}>
-                去词库
+                {t('dashboard.goWordbook')}
                 <IconChevronRight size={14} />
               </button>
             </div>
@@ -468,8 +557,8 @@ export default function Dashboard({ navigate }: ViewProps) {
             <span className="dash-note__mark" aria-hidden="true">
               ”
             </span>
-            <p>记忆不是一次完成的事，是一次次被重新想起。</p>
-            <span className="dash-note__by mono-label">DEEPWORD · 词渊</span>
+            <p>{t('brand.quoteMemory')}</p>
+            <span className="dash-note__by mono-label">{t('brand.footer')}</span>
           </section>
         </aside>
       </div>
@@ -477,11 +566,10 @@ export default function Dashboard({ navigate }: ViewProps) {
   );
 }
 
-/** 错题本为空时的留白小印。 */
-function IconLeafMark() {
+function IconLeafMark({ label }: { label: string }) {
   return (
     <span className="dash-inline-empty__mark" aria-hidden="true">
-      空
+      {label}
     </span>
   );
 }

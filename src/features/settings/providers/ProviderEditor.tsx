@@ -12,17 +12,19 @@ import type {
   ThinkingMode,
   Vendor,
 } from '@/domain/types';
-import { checkBaseUrl, VENDOR_OPTIONS, VENDOR_PRESETS, vendorLabel } from '@/infra/llm/providerModel';
+import { checkBaseUrl, VENDOR_OPTIONS, vendorLabel } from '@/infra/llm/providerModel';
 import { testLLMConnection } from '@/infra/llm';
 import type { LLMConnectionResult } from '@/infra/llm';
 import { cx, formatLatency, isLocalEndpoint } from '@/domain/utils';
 import { IconClose, IconEyeToggle, IconRefresh } from '@/ui/icons';
 import ModelListDialog from './ModelListDialog';
+import { useLocale, useT } from '@/i18n';
 import {
   PROTOCOL_OPTIONS,
   draftFromProfile,
   draftToLLMSettings,
   emptyProviderDraft,
+  protocolLabel,
 } from './draft';
 
 type TestState =
@@ -44,6 +46,8 @@ export default function ProviderEditor({
   onCancel,
   onSave,
 }: ProviderEditorProps) {
+  const t = useT();
+  const locale = useLocale();
   const [draft, setDraft] = useState<ProviderDraft>(() =>
     initial ? draftFromProfile(initial) : emptyProviderDraft(),
   );
@@ -68,22 +72,26 @@ export default function ProviderEditor({
     };
   }, []);
 
-  const preset = VENDOR_PRESETS[draft.vendor];
-  const protocolHint = PROTOCOL_OPTIONS.find((option) => option.value === draft.protocol)?.hint ?? '';
-  const baseUrlCheck = checkBaseUrl(draft.baseUrl);
+  const protocolHint =
+    draft.protocol === 'anthropic' ? t('providers.anthropicHint') : t('providers.openaiHint');
+  const baseUrlCheck = checkBaseUrl(draft.baseUrl, locale);
   const baseUrlError =
-    (touched.baseUrl || submitted) && !baseUrlCheck.ok ? (baseUrlCheck.message ?? 'Base URL 不合法。') : '';
+    (touched.baseUrl || submitted) && !baseUrlCheck.ok
+      ? (baseUrlCheck.message ?? t('providers.baseUrlInvalid'))
+      : '';
   const modelError =
-    (touched.model || submitted) && !draft.defaultModel.trim() ? '请填写默认 model，例如 deepseek-chat。' : '';
+    (touched.model || submitted) && !draft.defaultModel.trim()
+      ? t('providers.defaultModelRequired')
+      : '';
   const keyHint = isLocalEndpoint(draft.baseUrl)
-    ? '本地端点可留空'
+    ? t('providers.apiKeyHintLocal')
     : draft.protocol === 'anthropic'
-      ? 'Anthropic 必填'
-      : '远端接口通常必填';
+      ? t('providers.apiKeyHintAnthropic')
+      : t('providers.apiKeyHintRemote');
 
   const thinkingOptions: ReadonlyArray<{ value: ThinkingMode; label: string }> = [
-    { value: 'off', label: '尽量关闭' },
-    { value: 'provider-default', label: '交给服务商默认' },
+    { value: 'off', label: t('providers.thinkingOff') },
+    { value: 'provider-default', label: t('providers.thinkingDefault') },
   ];
 
   function resetFeedback() {
@@ -106,27 +114,17 @@ export default function ProviderEditor({
     resetFeedback();
   }
 
-  function fillPreset() {
-    if (!preset.baseUrl) return;
-    setDraft((current) => ({
-      ...current,
-      protocol: preset.protocol,
-      baseUrl: preset.baseUrl,
-      defaultModel: preset.model || current.defaultModel,
-    }));
-    setTouched((current) => ({ ...current, baseUrl: true }));
-    resetFeedback();
-  }
-
   async function runTest() {
-    const check = checkBaseUrl(draft.baseUrl);
+    const check = checkBaseUrl(draft.baseUrl, locale);
     if (!check.ok || !draft.defaultModel.trim()) {
       setTest({
         status: 'done',
         result: {
           ok: false,
           latencyMs: 0,
-          message: check.ok ? '请先填写默认 model，再测试连接。' : (check.message ?? '请先补全 Base URL。'),
+          message: check.ok
+            ? t('providers.testNeedModel')
+            : (check.message ?? t('providers.baseUrlRequiredSubmit')),
         },
       });
       return;
@@ -149,13 +147,13 @@ export default function ProviderEditor({
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitted(true);
-    const check = checkBaseUrl(draft.baseUrl);
+    const check = checkBaseUrl(draft.baseUrl, locale);
     if (!check.ok) {
-      setFormError(check.message ?? '请填写合法的 Base URL。');
+      setFormError(check.message ?? t('providers.baseUrlRequiredSubmit'));
       return;
     }
     if (!draft.defaultModel.trim()) {
-      setFormError('请填写默认 model。');
+      setFormError(t('providers.defaultModelRequiredSubmit'));
       return;
     }
     const normalized: ProviderDraft = {
@@ -167,24 +165,31 @@ export default function ProviderEditor({
       models: Array.from(new Set(draft.models.map((model) => model.trim()).filter(Boolean))),
     };
     const result = onSave(normalized);
-    if (!result.ok) setFormError(result.message ?? '保存失败，请稍后再试。');
+    if (!result.ok) setFormError(result.message ?? t('providers.saveFailedRetry'));
   }
 
   return (
     <section className="provider-editor" aria-labelledby="provider-editor-title">
       <header className="provider-editor__head">
         <div>
-          <p className="mono-label">{mode === 'create' ? 'NEW / 新增配置' : 'EDIT / 编辑配置'}</p>
+          <p className="mono-label">
+            {mode === 'create' ? t('providers.editorBadgeNew') : t('providers.editorBadgeEdit')}
+          </p>
           <h3 className="provider-editor__title" id="provider-editor-title">
             {mode === 'create'
-              ? '新增模型配置'
-              : `编辑「${initial?.name.trim() || '未命名配置'}」`}
+              ? t('providers.createTitle')
+              : t('providers.editTitle', {
+                  name: initial?.name.trim() || t('settings.unnamedProfile'),
+                })}
           </h3>
-          <p className="hint">
-            保存后可随时切换「当前使用」；出题、判分与讲解都使用当前使用的那一份。
-          </p>
+          <p className="hint">{t('providers.editorHint')}</p>
         </div>
-        <button type="button" className="icon-btn" onClick={onCancel} aria-label="关闭编辑">
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={onCancel}
+          aria-label={t('providers.closeEditAria')}
+        >
           <IconClose size={18} />
         </button>
       </header>
@@ -192,8 +197,8 @@ export default function ProviderEditor({
       <form className="provider-editor__form" onSubmit={handleSubmit} noValidate>
         <div className="field">
           <label className="label" htmlFor="provider-name">
-            <span>名称</span>
-            <span className="hint settings-inline-hint">用于区分多份配置，可留空</span>
+            <span>{t('providers.name')}</span>
+            <span className="hint settings-inline-hint">{t('providers.nameInlineHint')}</span>
           </label>
           <input
             id="provider-name"
@@ -201,7 +206,7 @@ export default function ProviderEditor({
             value={draft.name}
             maxLength={40}
             onChange={(event) => update({ name: event.target.value })}
-            placeholder="例如：DeepSeek 主力 / 本地 Ollama"
+            placeholder={t('providers.namePlaceholder')}
             spellCheck={false}
             autoComplete="off"
           />
@@ -209,8 +214,12 @@ export default function ProviderEditor({
 
         <div className="provider-editor__grid">
           <div className="field">
-            <span className="label">接口协议</span>
-            <div className="segmented settings-provider" role="group" aria-label="接口协议">
+            <span className="label">{t('providers.protocol')}</span>
+            <div
+              className="segmented settings-provider"
+              role="group"
+              aria-label={t('providers.protocol')}
+            >
               {PROTOCOL_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -222,7 +231,7 @@ export default function ProviderEditor({
                   aria-pressed={draft.protocol === option.value}
                   onClick={() => update({ protocol: option.value })}
                 >
-                  {option.label}
+                  {protocolLabel(option.value, t)}
                 </button>
               ))}
             </div>
@@ -231,7 +240,7 @@ export default function ProviderEditor({
 
           <div className="field">
             <label className="label" htmlFor="provider-vendor">
-              厂商
+              {t('providers.vendor')}
             </label>
             <select
               id="provider-vendor"
@@ -245,41 +254,32 @@ export default function ProviderEditor({
                 </option>
               ))}
             </select>
-            <span className="hint">只影响「关闭思考」参数与预设，不改变接口协议。</span>
+            <span className="hint">{t('providers.vendorHint')}</span>
           </div>
         </div>
 
         <div className="field">
-          <span className="label">
+          <label className="label" htmlFor="provider-base-url">
             <span>
-              Base URL <span className="mono-label">API ENDPOINT</span>
+              {t('providers.baseUrl')}{' '}
+              <span className="mono-label">{t('providers.apiEndpointLabel')}</span>
             </span>
-            <button
-              type="button"
-              className="btn btn--quiet btn--sm"
-              onClick={fillPreset}
-              disabled={!preset.baseUrl}
-              title={preset.hint}
-            >
-              填入预设
-            </button>
-          </span>
+          </label>
           <input
             id="provider-base-url"
             className="input"
             value={draft.baseUrl}
             onChange={(event) => update({ baseUrl: event.target.value })}
             onBlur={() => setTouched((current) => ({ ...current, baseUrl: true }))}
-            placeholder={preset.baseUrl || 'https://api.example.com/v1'}
+            placeholder="https://api.example.com/v1"
             spellCheck={false}
             autoComplete="off"
-            aria-label="Base URL"
             aria-invalid={Boolean(baseUrlError)}
           />
           <span className="hint">
             {draft.protocol === 'anthropic'
-              ? '填厂商给的前缀即可（官方 …/v1、火山方舟 …/api/coding），程序会自动补齐 /v1/messages。'
-              : '填到版本号即可（如 /v1），程序会自动拼接 /chat/completions。'}
+              ? t('providers.anthropicHint')
+              : t('providers.baseUrlHintOpenai')}
           </span>
           {baseUrlError && <span className="field-error">{baseUrlError}</span>}
         </div>
@@ -287,8 +287,8 @@ export default function ProviderEditor({
         <div className="field-row">
           <div className="field">
             <label className="label" htmlFor="provider-default-model">
-              <span>默认 model</span>
-              <span className="hint settings-inline-hint">可自由输入</span>
+              <span>{t('providers.defaultModel')}</span>
+              <span className="hint settings-inline-hint">{t('providers.defaultModelInlineHint')}</span>
             </label>
             <input
               id="provider-default-model"
@@ -297,7 +297,7 @@ export default function ProviderEditor({
               value={draft.defaultModel}
               onChange={(event) => update({ defaultModel: event.target.value })}
               onBlur={() => setTouched((current) => ({ ...current, model: true }))}
-              placeholder={preset.model || '例如 deepseek-chat'}
+              placeholder={t('providers.defaultModelExample')}
               spellCheck={false}
               autoComplete="off"
               aria-invalid={Boolean(modelError)}
@@ -312,7 +312,7 @@ export default function ProviderEditor({
 
           <div className="field">
             <span className="label">
-              <span>API Key</span>
+              <span>{t('providers.apiKey')}</span>
               <span className="hint settings-inline-hint">{keyHint}</span>
             </span>
             <span className="settings-key">
@@ -330,29 +330,27 @@ export default function ProviderEditor({
                 type="button"
                 className="icon-btn settings-key__toggle"
                 onClick={() => setShowKey((current) => !current)}
-                aria-label={showKey ? '隐藏 API Key' : '显示 API Key'}
+                aria-label={showKey ? t('providers.hideApiKey') : t('providers.showApiKey')}
                 aria-pressed={showKey}
               >
                 <IconEyeToggle size={16} />
               </button>
             </span>
-            <span className="hint">仅保存在本机；请求经本地代理转发，不会上传。</span>
+            <span className="hint">{t('providers.apiKeyStorageHint')}</span>
           </div>
         </div>
 
         <div className="provider-editor__models">
           <div>
-            <p className="provider-editor__models-title">模型白名单</p>
-            <p className="hint">
-              已保留 {draft.models.length} 个模型；用于搜索与切换。默认 model 不受白名单限制。
-            </p>
+            <p className="provider-editor__models-title">{t('providers.modelAllowlist')}</p>
+            <p className="hint">{t('providers.allowlistHint', { count: draft.models.length })}</p>
           </div>
           <button
             type="button"
             className="btn btn--ghost btn--sm"
             onClick={() => setModelsOpen(true)}
           >
-            <IconRefresh size={14} /> 拉取模型列表
+            <IconRefresh size={14} /> {t('providers.fetchModels')}
           </button>
         </div>
 
@@ -374,7 +372,7 @@ export default function ProviderEditor({
         <div className="settings-tuning">
           <div className="field settings-range">
             <span className="label">
-              <span>温度 Temperature</span>
+              <span>{t('providers.temperatureLabel')}</span>
               <span className="settings-range__value">{draft.temperature.toFixed(1)}</span>
             </span>
             <input
@@ -384,14 +382,14 @@ export default function ProviderEditor({
               step={0.1}
               value={draft.temperature}
               onChange={(event) => update({ temperature: Number(event.target.value) })}
-              aria-label="温度 Temperature"
+              aria-label={t('providers.temperatureAria')}
             />
-            <span className="hint">越低越稳定，出题更守规矩；越高越有变化，但更易跑题。</span>
+            <span className="hint">{t('providers.temperatureHint')}</span>
           </div>
 
           <div className="field settings-max-tokens">
             <label className="label" htmlFor="provider-max-tokens">
-              最大输出 Tokens
+              {t('providers.maxTokensLabel')}
             </label>
             <input
               id="provider-max-tokens"
@@ -405,13 +403,13 @@ export default function ProviderEditor({
                 update({ maxTokens: Math.max(64, Number(event.target.value) || 64) })
               }
             />
-            <span className="hint">一次生成 6~8 道练习，建议 2000~4000。</span>
+            <span className="hint">{t('providers.maxTokensHint')}</span>
           </div>
         </div>
 
         <div className="field provider-editor__thinking">
-          <span className="label">思考开关</span>
-          <div className="segmented" role="group" aria-label="思考开关">
+          <span className="label">{t('providers.thinking')}</span>
+          <div className="segmented" role="group" aria-label={t('providers.thinking')}>
             {thinkingOptions.map((option) => (
               <button
                 key={option.value}
@@ -427,10 +425,7 @@ export default function ProviderEditor({
               </button>
             ))}
           </div>
-          <span className="hint">
-            选「尽量关闭」会按厂商注入关闭思考的参数（不同厂商参数不同）。部分模型不支持关闭思考，
-            即使这样设置也可能仍会思考，请以实际返回为准。
-          </span>
+          <span className="hint">{t('providers.thinkingHint')}</span>
         </div>
 
         <div className="provider-editor__test">
@@ -442,11 +437,11 @@ export default function ProviderEditor({
           >
             {test.status === 'testing' ? (
               <>
-                <span className="spinner" /> 正在连接…
+                <span className="spinner" /> {t('providers.connecting')}
               </>
             ) : (
               <>
-                <IconRefresh size={15} /> 测试连接
+                <IconRefresh size={15} /> {t('providers.testConnection')}
               </>
             )}
           </button>
@@ -462,7 +457,7 @@ export default function ProviderEditor({
             >
               <div>
                 <span className="callout__title">
-                  {test.result.ok ? '连接成功' : '连接失败'}
+                  {test.result.ok ? t('providers.testOk') : t('providers.testFail')}
                   {test.result.ok && (
                     <span className="settings-test-latency">
                       {' '}
@@ -485,10 +480,10 @@ export default function ProviderEditor({
 
         <div className="settings-actions provider-editor__actions">
           <button type="button" className="btn btn--quiet" onClick={onCancel}>
-            取消
+            {t('common.cancel')}
           </button>
           <button type="submit" className="btn btn--primary">
-            {mode === 'create' ? '保存配置' : '保存修改'}
+            {mode === 'create' ? t('providers.save') : t('providers.saveEdit')}
           </button>
         </div>
       </form>

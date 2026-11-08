@@ -3,6 +3,7 @@
  */
 
 import { useState } from 'react';
+import { useT } from '@/i18n';
 import { IconSearch } from '@/ui/icons';
 
 export interface StudySearchProps {
@@ -11,6 +12,7 @@ export interface StudySearchProps {
 }
 
 export default function StudySearch({ disabled, onSearch }: StudySearchProps) {
+  const t = useT();
   const [value, setValue] = useState('');
 
   function submit() {
@@ -23,7 +25,7 @@ export default function StudySearch({ disabled, onSearch }: StudySearchProps) {
     <form
       className="study-search"
       role="search"
-      aria-label="学习中搜索"
+      aria-label={t('study.searchPlaceholder')}
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -35,13 +37,13 @@ export default function StudySearch({ disabled, onSearch }: StudySearchProps) {
         type="search"
         value={value}
         disabled={disabled}
-        placeholder="搜索单词、翻译…"
+        placeholder={t('study.searchPlaceholder')}
         autoComplete="off"
         spellCheck={false}
         onChange={(event) => setValue(event.target.value)}
       />
       <button type="submit" className="study-search__go" disabled={disabled || !value.trim()}>
-        查
+        {t('study.searchButton')}
       </button>
     </form>
   );

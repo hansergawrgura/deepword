@@ -1,10 +1,16 @@
-/**
- * localStorage 持久化层（数据版本 v3，无旧版迁移）。
- */
-
 import { SEED_WORDS } from '@/data/wordbanks';
 import {
+  BACKUP_APP,
+  BACKUP_SCHEME,
   DATA_VERSION,
+  LEGACY_STORAGE_KEYS,
+  LEGACY_V3_STORAGE_KEY,
+  STORAGE_KEY,
+  STORAGE_PROBE_KEY,
+  isAcceptedBackupApp,
+  isAcceptedBackupScheme,
+} from '@/app/identity';
+import {
   DEFAULT_PRACTICE_SETTINGS,
   MAX_MODELS_PER_PROVIDER,
   MAX_PROVIDERS,
@@ -31,11 +37,10 @@ import {
 import { VENDOR_OPTIONS, inferVendorFromBaseUrl } from '@/infra/llm/providerModel';
 import { pruneDaily } from '@/domain/stats';
 import { clamp, uid } from '@/domain/utils';
+import { createT, DEFAULT_LOCALE, normalizeLocale } from '@/i18n';
+import type { AppLocale } from '@/domain/types';
 
-export const STORAGE_KEY = 'deepword:data:v3';
-
-/** 旧版数据键；读取 v3 缺失或版本不对时一并清除。 */
-export const LEGACY_STORAGE_KEYS = ['deepword:data', 'deepword:data:v1', 'deepword:data:v2'] as const;
+export { STORAGE_KEY, LEGACY_STORAGE_KEYS };
 
 export const MAX_WORDS = 10_000;
 export const MAX_ATTEMPTS = 3_000;
@@ -48,9 +53,8 @@ const VENDOR_VALUES = VENDOR_OPTIONS.map((item) => item.value);
 export function storageAvailable(): boolean {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return false;
-    const probe = '__deepword_probe__';
-    window.localStorage.setItem(probe, '1');
-    window.localStorage.removeItem(probe);
+    window.localStorage.setItem(STORAGE_PROBE_KEY, '1');
+    window.localStorage.removeItem(STORAGE_PROBE_KEY);
     return true;
   } catch {
     return false;
@@ -140,10 +144,6 @@ export function normalizeWord(input: WordInput): WordInput | null {
   return normalizeWordInput(input);
 }
 
-function createDefaultProviders(): ProviderProfile[] {
-  return [];
-}
-
 /* ------------------------------------------------------------------ */
 /* 初始数据                                                             */
 /* ------------------------------------------------------------------ */
@@ -177,7 +177,7 @@ export function createInitialData(now = Date.now()): AppData {
   return {
     version: DATA_VERSION,
     words,
-    providers: createDefaultProviders(),
+    providers: [],
     activeProviderId: null,
     practice: defaultPracticeSettings(),
     session: null,
@@ -185,10 +185,15 @@ export function createInitialData(now = Date.now()): AppData {
     attempts: [],
     mistakes: {},
     theme: 'light',
+    locale: DEFAULT_LOCALE,
     stats: { daily: {} },
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function sanitizeLocale(value: unknown): AppLocale {
+  return normalizeLocale(value);
 }
 
 /* ------------------------------------------------------------------ */
@@ -574,20 +579,21 @@ export function hydrateData(
   options: { now?: number; requireWords?: boolean } = {},
 ): AppData {
   const now = options.now ?? Date.now();
-  if (!raw || typeof raw !== 'object') throw new Error('数据格式不正确');
+  const t = createT(DEFAULT_LOCALE);
+  if (!raw || typeof raw !== 'object') throw new Error(t('storage.dataFormat'));
   const source = raw as Record<string, unknown>;
 
   if (source.version !== DATA_VERSION) {
-    throw new Error('仅支持数据版本 3');
+    throw new Error(t('storage.versionOnlyV3'));
   }
 
   if (source.words !== undefined && !Array.isArray(source.words)) {
-    throw new Error('单词列表格式不正确');
+    throw new Error(t('storage.wordsListFormat'));
   }
 
   const rawWords = Array.isArray(source.words) ? (source.words as unknown[]) : null;
   if (!rawWords) {
-    if (options.requireWords) throw new Error('备份中缺少单词列表');
+    if (options.requireWords) throw new Error(t('storage.backupMissingWords'));
     return createInitialData(now);
   }
 
@@ -646,6 +652,7 @@ export function hydrateData(
     session: sanitizeSession(source.session, now),
     mastery,
     theme: source.theme === 'dark' ? 'dark' : 'light',
+    locale: sanitizeLocale(source.locale),
     stats: sanitizeStats(source.stats, now),
     createdAt: timestamp(source.createdAt, now),
     updatedAt: now,
@@ -697,43 +704,74 @@ function reseedStorage(now: number): AppData {
   return data;
 }
 
+function tryParseV3Payload(raw: string, now: number): { ok: true; data: AppData } | { ok: false; reason: 'version' | 'corrupt'; error?: unknown } {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      (parsed as Record<string, unknown>).version !== DATA_VERSION
+    ) {
+      return { ok: false, reason: 'version' };
+    }
+    return { ok: true, data: hydrateData(parsed, { now }) };
+  } catch (error) {
+    return { ok: false, reason: 'corrupt', error };
+  }
+}
+
+function emptyWordsWarning(data: AppData): LoadResult {
+  if (data.words.length === 0) {
+    const t = createT(normalizeLocale(data.locale));
+    return { data, warning: t('storage.warnEmpty') };
+  }
+  return { data };
+}
+
 export function loadData(now = Date.now()): LoadResult {
   const initial = createInitialData(now);
+  const t0 = createT(normalizeLocale(initial.locale));
   if (!storageAvailable()) {
-    return { data: initial, warning: '当前浏览器无法使用 localStorage，学习进度将无法保存。' };
+    return { data: initial, warning: t0('storage.warnNoStorage') };
   }
 
-  const rawV3 = window.localStorage.getItem(STORAGE_KEY);
-  if (rawV3) {
-    try {
-      const parsed = JSON.parse(rawV3) as unknown;
-      if (
-        !parsed ||
-        typeof parsed !== 'object' ||
-        (parsed as Record<string, unknown>).version !== DATA_VERSION
-      ) {
-        const data = reseedStorage(now);
-        return {
-          data,
-          warning: '本地数据版本不匹配，已载入示例词库。',
-        };
-      }
-      const data = hydrateData(parsed, { now });
-      if (data.words.length === 0) {
-        return {
-          data,
-          warning: '词库为空，可在「词库」页添加单词或重新载入示例词库。',
-        };
-      }
-      return { data };
-    } catch (error) {
-      backupCorrupt(STORAGE_KEY, rawV3);
-      const data = reseedStorage(now);
-      return {
-        data,
-        warning: `本地数据读取失败（${error instanceof Error ? error.message : '未知错误'}），已载入示例词库，原数据已尝试备份。`,
-      };
+  const rawCurrent = window.localStorage.getItem(STORAGE_KEY);
+  if (rawCurrent) {
+    const parsed = tryParseV3Payload(rawCurrent, now);
+    if (parsed.ok) {
+      wipeLegacyStorageKeys();
+      return emptyWordsWarning(parsed.data);
     }
+    if (parsed.reason === 'version') {
+      const data = reseedStorage(now);
+      return { data, warning: createT(normalizeLocale(data.locale))('storage.warnVersion') };
+    }
+    backupCorrupt(STORAGE_KEY, rawCurrent);
+    const data = reseedStorage(now);
+    const t = createT(normalizeLocale(data.locale));
+    return {
+      data,
+      warning: t('storage.warnReadFailed', {
+        error: parsed.error instanceof Error ? parsed.error.message : t('common.unknownError'),
+      }),
+    };
+  }
+
+  const rawLegacy = window.localStorage.getItem(LEGACY_V3_STORAGE_KEY);
+  if (rawLegacy) {
+    const parsed = tryParseV3Payload(rawLegacy, now);
+    if (parsed.ok) {
+      const saved = saveData(parsed.data);
+      wipeLegacyStorageKeys();
+      if (!saved.ok) {
+        return {
+          data: parsed.data,
+          warning: saved.error ?? createT(normalizeLocale(parsed.data.locale))('storage.warnMigrateWrite'),
+        };
+      }
+      return emptyWordsWarning(parsed.data);
+    }
+    backupCorrupt(LEGACY_V3_STORAGE_KEY, rawLegacy);
   }
 
   wipeLegacyStorageKeys();
@@ -743,7 +781,8 @@ export function loadData(now = Date.now()): LoadResult {
 }
 
 export function saveData(data: AppData): { ok: boolean; error?: string } {
-  if (!storageAvailable()) return { ok: false, error: '浏览器不支持 localStorage' };
+  const t = createT(normalizeLocale(data.locale));
+  if (!storageAvailable()) return { ok: false, error: t('storage.noLocalStorage') };
   try {
     const payload: AppData = { ...data, version: DATA_VERSION, updatedAt: Date.now() };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -754,9 +793,7 @@ export function saveData(data: AppData): { ok: boolean; error?: string } {
       (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED');
     return {
       ok: false,
-      error: isQuota
-        ? '本地存储空间已满，请导出备份后清理部分练习记录。'
-        : '保存失败，请检查浏览器隐私设置。',
+      error: isQuota ? t('storage.quotaExceeded') : t('storage.saveFailed'),
     };
   }
 }
@@ -771,8 +808,8 @@ export function exportBackup(data: AppData, options: { includeApiKey?: boolean }
   );
   return JSON.stringify(
     {
-      app: 'deepword',
-      scheme: 'deepword-backup',
+      app: BACKUP_APP,
+      scheme: BACKUP_SCHEME,
       version: DATA_VERSION,
       exportedAt: new Date().toISOString(),
       data: { ...data, version: DATA_VERSION, providers },
@@ -783,22 +820,28 @@ export function exportBackup(data: AppData, options: { includeApiKey?: boolean }
 }
 
 export function importBackup(raw: string): AppData {
+  const t = createT(DEFAULT_LOCALE);
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    throw new Error('文件不是合法的 JSON');
+    throw new Error(t('storage.invalidJson'));
   }
-  if (!parsed || typeof parsed !== 'object') throw new Error('备份内容为空或格式不正确');
+  if (!parsed || typeof parsed !== 'object') throw new Error(t('storage.backupEmpty'));
   const record = parsed as Record<string, unknown>;
   const hasWrapper = 'data' in record;
-  if (hasWrapper && record.version !== DATA_VERSION) {
-    throw new Error('仅支持 v3 备份');
+  if (hasWrapper) {
+    if (!isAcceptedBackupApp(record.app) || !isAcceptedBackupScheme(record.scheme)) {
+      throw new Error(t('storage.backupAppMismatch'));
+    }
+    if (record.version !== DATA_VERSION) {
+      throw new Error(t('storage.backupV3Only'));
+    }
   }
   const payload = hasWrapper ? record.data : parsed;
-  if (!payload || typeof payload !== 'object') throw new Error('备份中缺少 data 字段');
+  if (!payload || typeof payload !== 'object') throw new Error(t('storage.backupMissingData'));
   if ((payload as Record<string, unknown>).version !== DATA_VERSION) {
-    throw new Error('仅支持 v3 备份');
+    throw new Error(t('storage.backupV3Only'));
   }
   return hydrateData(payload, { requireWords: true });
 }
@@ -825,8 +868,8 @@ export function resetProgress(data: AppData, now = Date.now()): AppData {
   };
 }
 
-export function getStorageUsage(): { bytes: number; human: string } {
-  if (!storageAvailable()) return { bytes: 0, human: '不可用' };
+export function getStorageUsage(locale = DEFAULT_LOCALE): { bytes: number; human: string } {
+  if (!storageAvailable()) return { bytes: 0, human: createT(locale)('storage.usageUnavailable') };
   const raw = window.localStorage.getItem(STORAGE_KEY) ?? '';
   let bytes = raw.length * 2;
   try {

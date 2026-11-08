@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ViewId } from '@/domain/types';
+import { useLocale, useT } from '@/i18n';
 import { Sidebar } from './Sidebar';
 import Dashboard from '@/features/dashboard/Dashboard';
 import WordbookView from '@/features/wordbook/WordbookView';
@@ -9,19 +10,14 @@ import { ToastStack } from '@/ui/ToastStack';
 
 const VIEWS: ViewId[] = ['dashboard', 'study', 'wordbook', 'settings'];
 
-const VIEW_TITLES: Record<ViewId, string> = {
-  dashboard: '今日',
-  study: '学习',
-  wordbook: '词库',
-  settings: '设置',
-};
-
 function readViewFromHash(): ViewId {
   const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0];
   return VIEWS.includes(raw as ViewId) ? (raw as ViewId) : 'dashboard';
 }
 
 export function Shell() {
+  const t = useT();
+  const locale = useLocale();
   const [view, setView] = useState<ViewId>(readViewFromHash);
 
   const navigate = useCallback((next: ViewId) => {
@@ -43,8 +39,9 @@ export function Shell() {
   }, []);
 
   useEffect(() => {
-    document.title = `${VIEW_TITLES[view]} · 词渊 DeepWord`;
-  }, [view]);
+    document.documentElement.lang = locale;
+    document.title = t('brand.documentTitle', { view: t(`nav.${view}`) });
+  }, [locale, t, view]);
 
   return (
     <div className="app-shell">
@@ -58,7 +55,7 @@ export function Shell() {
           main?.scrollIntoView({ block: 'start' });
         }}
       >
-        跳到主内容
+        {t('shell.skipToContent')}
       </a>
       <Sidebar current={view} onNavigate={navigate} />
       <main className="app-main" id="main-content" tabIndex={-1}>
@@ -71,9 +68,9 @@ export function Shell() {
           </div>
         </div>
         <footer className="app-footer">
-          <span>DEEPWORD · 词渊</span>
-          <span className="app-footer__motto">以错题为师 · 以温故为舟</span>
-          <span>所有数据保存在本机浏览器</span>
+          <span>{t('brand.footer')}</span>
+          <span className="app-footer__motto">{t('brand.motto')}</span>
+          <span>{t('shell.dataLocalOnly')}</span>
         </footer>
       </main>
       <ToastStack />

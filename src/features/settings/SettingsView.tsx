@@ -25,7 +25,10 @@ import {
 } from '@/infra/llm/providerModel';
 import { useEnglishVoices } from '@/infra/tts';
 import { FEEDBACK_PROMPT_VERSION } from '@/infra/llm';
+import { downloadBackupName } from '@/app/identity';
 import { APP_VERSION } from '@/app/version';
+import { useLocale, useT } from '@/i18n';
+import type { Locale } from '@/i18n';
 import { clamp, cx, isLocalEndpoint } from '@/domain/utils';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import { IconCheck, IconDownload, IconPlus, IconSparkle, IconUpload } from '@/ui/icons';
@@ -37,17 +40,17 @@ import './Settings.css';
 type EditorState = { mode: 'create' } | { mode: 'edit'; id: string };
 type DialogKind = 'import' | 'clear-progress' | 'reset-all' | null;
 
-/** 每词题量可选值（4~8）。 */
+/** Per-word question count options (4–8). */
 const QUESTIONS_PER_WORD_OPTIONS = [4, 5, 6, 7, 8];
-/** 每轮复习词数可选值（4~6）。 */
+/** Review words per round options (4–6). */
 const REVIEW_WORDS_OPTIONS = [4, 5, 6];
-/** 每轮新词数可选值（1~10）。 */
+/** New words per round options (1–10). */
 const NEW_WORDS_OPTIONS = Array.from({ length: 10 }, (_, index) => index + 1);
-/** 答对后自动跳转：毫秒，0 = 手动。 */
+/** Auto-advance delay in ms; 0 = manual. */
 const AUTO_ADVANCE_OPTIONS = [
-  { value: 3_000, label: '3 秒' },
-  { value: 5_000, label: '5 秒' },
-  { value: 0, label: '手动' },
+  { value: 3_000, key: 'settings.autoAdvance3s' as const },
+  { value: 5_000, key: 'settings.autoAdvance5s' as const },
+  { value: 0, key: 'common.manual' as const },
 ];
 
 function downloadJson(filename: string, content: string) {
@@ -63,6 +66,8 @@ function downloadJson(filename: string, content: string) {
 }
 
 export default function SettingsView() {
+  const t = useT();
+  const locale = useLocale();
   const { data, actions } = useApp();
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProviderProfile | null>(null);
@@ -71,7 +76,7 @@ export default function SettingsView() {
   const [importError, setImportError] = useState('');
   const [includeKey, setIncludeKey] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
-  // 英文语音列表：浏览器可能在首次加载后才拿到 voices，Hook 内部监听 voiceschanged。
+  // {t('settings.ttsVoice')}列表：浏览器可能在首次加载后才拿到 voices，Hook 内部监听 voiceschanged。
   const voices = useEnglishVoices();
 
   const usage = useMemo(() => getStorageUsage(), [data.updatedAt]);
@@ -89,12 +94,12 @@ export default function SettingsView() {
     : false;
   const aiReady = configured && !needsKey;
   const aiStatusLabel = !activeSettings
-    ? '尚未配置模型'
+    ? t('settings.aiNone')
     : !configured
-      ? '配置待补全'
+      ? t('settings.aiIncomplete')
       : needsKey
-        ? '待填写 API Key'
-        : 'AI 已就绪';
+        ? t('settings.aiNeedKey')
+        : t('settings.aiReady');
   const atLimit = data.providers.length >= MAX_PROVIDERS;
   const editingProfile =
     editor?.mode === 'edit'
@@ -173,7 +178,7 @@ export default function SettingsView() {
 
   function openCreate() {
     if (atLimit) {
-      actions.toast(`最多保存 ${MAX_PROVIDERS} 份配置`, 'info');
+      actions.toast(t('settings.providerLimit', { max: MAX_PROVIDERS }), 'info');
       return;
     }
     setEditor({ mode: 'create' });
@@ -189,7 +194,7 @@ export default function SettingsView() {
   function handleSave(draft: ProviderDraft): { ok: boolean; message?: string } {
     if (editor && editor.mode === 'edit') {
       actions.updateProvider(editor.id, draft);
-      actions.toast('模型配置已更新', 'success');
+      actions.toast(t('settings.providerUpdated'), 'success');
       setEditor(null);
       return { ok: true };
     }
@@ -210,11 +215,11 @@ export default function SettingsView() {
 
   function handleExportBackup() {
     downloadJson(
-      `deepword-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      downloadBackupName(new Date().toISOString().slice(0, 10)),
       exportBackup(data, { includeApiKey: includeKey }),
     );
     actions.toast(
-      includeKey ? '完整备份已导出（包含 API Key，请妥善保管）' : '备份已导出（不含 API Key）',
+      includeKey ? t('settings.toastExportedKey') : t('settings.toastExported'),
       'success',
     );
   }
@@ -228,7 +233,7 @@ export default function SettingsView() {
       setPendingImport(next);
       setDialog('import');
     } catch (error) {
-      setImportError(error instanceof Error ? error.message : '备份文件解析失败');
+      setImportError(error instanceof Error ? error.message : t('settings.parseBackupFailed'));
     }
   }
 
@@ -261,9 +266,9 @@ export default function SettingsView() {
               {aiStatusLabel}
             </span>
           </div>
-          <h1 className="view-title">设置</h1>
+          <h1 className="view-title">{t('settings.title')}</h1>
           <p className="view-sub">
-            保存多份大模型配置，仅「当前使用」的一份参与出题与判分。所有数据与密钥只保存在这台设备的浏览器里。
+            {t('settings.subtitle')}
           </p>
         </div>
       </header>
@@ -272,11 +277,11 @@ export default function SettingsView() {
         <div className="settings-col">
           <section className="card settings-card">
             <header className="settings-card__head">
-              <span className="settings-card__index">壹</span>
+              <span className="settings-card__index">{t('settings.section1')}</span>
               <div>
-                <h2 className="settings-card__title">模型连接</h2>
+                <h2 className="settings-card__title">{t('settings.modelsTitle')}</h2>
                 <p className="settings-card__sub">
-                  支持 OpenAI 兼容接口与 Anthropic；同一时间只有一份配置生效。
+                  {t('settings.modelsSub')}
                 </p>
               </div>
               {!editor && (
@@ -290,7 +295,7 @@ export default function SettingsView() {
                     onClick={openCreate}
                     disabled={atLimit}
                   >
-                    <IconPlus size={14} /> 新增配置
+                    <IconPlus size={14} /> {t('settings.addProvider')}
                   </button>
                 </div>
               )}
@@ -319,13 +324,12 @@ export default function SettingsView() {
 
                   {atLimit && (
                     <p className="hint">
-                      已达到 {MAX_PROVIDERS} 份配置上限；删除一份后才能继续新增。
+                      {t('settings.providerLimit', { max: MAX_PROVIDERS })}
                     </p>
                   )}
 
                   <p className="settings-note">
-                    <strong>安全提示：</strong>API Key 仅保存在本机 localStorage 中，
-                    请求经本地代理转发，不记录、不上传。删除配置会一并删除其中保存的 Key。
+                    <strong>{t('settings.securityNote')}</strong>
                   </p>
                 </>
               )}
@@ -334,11 +338,11 @@ export default function SettingsView() {
 
           <section className="card settings-card settings-practice">
             <header className="settings-card__head">
-              <span className="settings-card__index">贰</span>
+              <span className="settings-card__index">{t('settings.section2')}</span>
               <div>
-                <h2 className="settings-card__title">练习设置</h2>
+                <h2 className="settings-card__title">{t('settings.practiceTitle')}</h2>
                 <p className="settings-card__sub">
-                  一轮怎么练、答对后多久翻页、发音怎么读。改完立即生效。
+                  {t('settings.practiceSub')}
                 </p>
               </div>
             </header>
@@ -346,7 +350,7 @@ export default function SettingsView() {
               <div className="field-row">
                 <div className="field">
                   <label className="label" htmlFor="practice-new-words">
-                    每轮新词数
+                    {t('settings.newWordsPerRound')}
                   </label>
                   <select
                     id="practice-new-words"
@@ -358,16 +362,16 @@ export default function SettingsView() {
                   >
                     {NEW_WORDS_OPTIONS.map((count) => (
                       <option key={count} value={count}>
-                        {count} 个
+                        {t('settings.optionCount', { count })}
                       </option>
                     ))}
                   </select>
-                  <span className="hint">一轮认几个新词；贪多不如吃透，默认 1 个。</span>
+                  <span className="hint">{t('settings.hintNewWordsPerRound')}</span>
                 </div>
 
                 <div className="field">
                   <label className="label" htmlFor="practice-questions-per-word">
-                    每词题量
+                    {t('settings.questionsPerWord')}
                   </label>
                   <select
                     id="practice-questions-per-word"
@@ -379,18 +383,18 @@ export default function SettingsView() {
                   >
                     {QUESTIONS_PER_WORD_OPTIONS.map((count) => (
                       <option key={count} value={count}>
-                        {count} 题
+                        {t('settings.optionQuestions', { count })}
                       </option>
                     ))}
                   </select>
-                  <span className="hint">一个新词出几道题，覆盖英译中、中译英、拼写等。</span>
+                  <span className="hint">{t('settings.hintQuestionsPerWord')}</span>
                 </div>
               </div>
 
               <div className="field-row">
                 <div className="field">
                   <label className="label" htmlFor="practice-review-words">
-                    每轮复习词数
+                    {t('settings.reviewWords')}
                   </label>
                   <select
                     id="practice-review-words"
@@ -400,16 +404,16 @@ export default function SettingsView() {
                   >
                     {REVIEW_WORDS_OPTIONS.map((count) => (
                       <option key={count} value={count}>
-                        {count} 个
+                        {t('settings.optionCount', { count })}
                       </option>
                     ))}
                   </select>
-                  <span className="hint">新词之后，按薄弱度挑几个旧词回炉。</span>
+                  <span className="hint">{t('settings.hintReviewWords')}</span>
                 </div>
 
                 <div className="field">
                   <label className="label" htmlFor="practice-review-questions">
-                    每轮复习题量
+                    {t('settings.reviewQuestions')}
                   </label>
                   <select
                     id="practice-review-questions"
@@ -421,19 +425,19 @@ export default function SettingsView() {
                   >
                     {reviewQuestionOptions.map((count) => (
                       <option key={count} value={count}>
-                        {count} 题
+                        {t('settings.optionQuestions', { count })}
                       </option>
                     ))}
                   </select>
                   <span className="hint">
-                    随复习词数联动，范围 {reviewWords}～{reviewWords * 2} 题，保证每个复习词至少被问一次。
+                    {t('settings.hintReviewQuestions', { min: reviewWords, max: reviewWords * 2 })}
                   </span>
                 </div>
               </div>
 
               <div className="field">
-                <span className="label">答对后自动跳转</span>
-                <div className="segmented" role="group" aria-label="答对后自动跳转">
+                <span className="label">{t('settings.autoAdvance')}</span>
+                <div className="segmented" role="group" aria-label={t('settings.autoAdvance')}>
                   {AUTO_ADVANCE_OPTIONS.map((option) => (
                     <button
                       key={option.value}
@@ -446,23 +450,23 @@ export default function SettingsView() {
                       aria-pressed={practice.feedbackAutoAdvanceMs === option.value}
                       onClick={() => updatePractice({ feedbackAutoAdvanceMs: option.value })}
                     >
-                      {option.label}
+                      {t(option.key)}
                     </button>
                   ))}
                 </div>
-                <span className="hint">答对后停留几秒自动翻到下一题；答错一定等你看完讲解。</span>
+                <span className="hint">{t('settings.hintAutoAdvance')}</span>
               </div>
 
               <div className="settings-practice__row">
                 <div className="settings-practice__text">
-                  <span className="label">自动讲解</span>
-                  <span className="hint">答错时自动生成错因、记忆点与改进建议。</span>
+                  <span className="label">{t('settings.autoExplain')}</span>
+                  <span className="hint">{t('settings.hintAutoExplain')}</span>
                 </div>
                 <button
                   type="button"
                   role="switch"
                   aria-checked={practice.autoExplain}
-                  aria-label="自动讲解"
+                  aria-label={t('settings.autoExplain')}
                   className="switch"
                   onClick={() => updatePractice({ autoExplain: !practice.autoExplain })}
                 />
@@ -472,7 +476,7 @@ export default function SettingsView() {
 
               <div className="field settings-range">
                 <span className="label">
-                  <span>发音语速</span>
+                  <span>{t('settings.ttsRate')}</span>
                   <span className="settings-range__value">{practice.tts.rate.toFixed(1)}×</span>
                 </span>
                 <input
@@ -482,14 +486,14 @@ export default function SettingsView() {
                   step={0.1}
                   value={practice.tts.rate}
                   onChange={(event) => updateTts({ rate: Number(event.target.value) })}
-                  aria-label="发音语速"
+                  aria-label={t('settings.ttsRate')}
                 />
-                <span className="hint">0.5 最慢、2 最快；听音题与自动朗读都用这个语速。</span>
+                <span className="hint">{t('settings.hintTtsRate')}</span>
               </div>
 
               <div className="field">
                 <label className="label" htmlFor="practice-tts-voice">
-                  英文语音
+                  {t('settings.ttsVoice')}
                 </label>
                 <select
                   id="practice-tts-voice"
@@ -498,7 +502,7 @@ export default function SettingsView() {
                   disabled={voices.length === 0}
                   onChange={(event) => updateTts({ voiceUri: event.target.value })}
                 >
-                  <option value="">自动选择（系统默认英文语音）</option>
+                  <option value="">{t('settings.ttsVoiceAuto')}</option>
                   {voices.map((voice) => (
                     <option key={voice.voiceUri} value={voice.voiceUri}>
                       {voice.name} · {voice.lang}
@@ -507,21 +511,21 @@ export default function SettingsView() {
                 </select>
                 <span className="hint">
                   {voices.length > 0
-                    ? `检测到 ${voices.length} 个英文语音，可挑一个顺耳的。`
-                    : '当前浏览器没有可用的英文语音，听音题会暂时不出现；换用 Chrome / Edge / Safari 可恢复。'}
+                    ? t('settings.hintTtsVoices', { count: voices.length })
+                    : t('settings.hintTtsNone')}
                 </span>
               </div>
 
               <div className="settings-practice__row">
                 <div className="settings-practice__text">
-                  <span className="label">自动朗读</span>
-                  <span className="hint">进入练习时自动朗读单词与例句。</span>
+                  <span className="label">{t('settings.autoPlay')}</span>
+                  <span className="hint">{t('settings.hintTtsAutoPlay')}</span>
                 </div>
                 <button
                   type="button"
                   role="switch"
                   aria-checked={practice.tts.autoPlay}
-                  aria-label="自动朗读发音"
+                  aria-label={t('settings.autoPlay')}
                   className="switch"
                   onClick={() => updateTts({ autoPlay: !practice.tts.autoPlay })}
                 />
@@ -531,35 +535,39 @@ export default function SettingsView() {
 
           <section className="card settings-card">
             <header className="settings-card__head">
-              <span className="settings-card__index">叁</span>
+              <span className="settings-card__index">{t('settings.section3')}</span>
               <div>
-                <h2 className="settings-card__title">数据管理</h2>
-                <p className="settings-card__sub">数据只存在这个浏览器里。请定期导出备份。</p>
+                <h2 className="settings-card__title">{t('settings.dataTitle')}</h2>
+                <p className="settings-card__sub">{t('settings.dataSub')}</p>
               </div>
             </header>
 
             <div className="settings-card__body">
               <div className="settings-data-row">
                 <div>
-                  <p className="settings-data-row__title">本机存储</p>
+                  <p className="settings-data-row__title">{t('settings.localStorageTitle')}</p>
                   <p className="settings-data-row__desc">
-                    已占用 {usage.human} · {data.words.length} 个词条 · {data.attempts.length} 条作答记录
-                    · {data.providers.length} 份配置
+                    {t('settings.localStorageDesc', {
+                    usage: usage.human,
+                    words: data.words.length,
+                    attempts: data.attempts.length,
+                    providers: data.providers.length,
+                  })}
                   </p>
                 </div>
-                <span className="badge badge--outline">localStorage</span>
+                <span className="badge badge--outline">{t('settings.storageValue')}</span>
               </div>
 
               <div className="settings-data-actions">
                 <button type="button" className="btn btn--ghost" onClick={handleExportBackup}>
-                  <IconDownload size={15} /> 导出完整备份
+                  <IconDownload size={15} /> {t('settings.exportBackup')}
                 </button>
                 <button
                   type="button"
                   className="btn btn--ghost"
                   onClick={() => importInputRef.current?.click()}
                 >
-                  <IconUpload size={15} /> 导入备份
+                  <IconUpload size={15} /> {t('settings.importBackup')}
                 </button>
                 <input
                   ref={importInputRef}
@@ -579,37 +587,34 @@ export default function SettingsView() {
                   checked={includeKey}
                   onChange={(event) => setIncludeKey(event.target.checked)}
                 />
-                <span>
-                  导出时包含 API Key
-                  <span className="hint">（默认不含，避免备份文件泄露密钥）</span>
-                </span>
+                <span>{t('settings.includeApiKey')}</span>
               </label>
 
-              {importError && <p className="field-error">导入失败：{importError}</p>}
+              {importError && <p className="field-error">{t('settings.importFailed')}{importError}</p>}
 
               <hr className="divider" />
 
               <div className="settings-danger">
                 <div>
-                  <p className="settings-data-row__title">清空学习进度</p>
-                  <p className="settings-data-row__desc">保留词库、模型配置与主题，重置所有卡片、错题与统计。</p>
+                  <p className="settings-data-row__title">{t('settings.clearProgressTitle')}</p>
+                  <p className="settings-data-row__desc">{t('settings.clearProgressDesc')}</p>
                   <button
                     type="button"
                     className="btn btn--danger btn--sm"
                     onClick={() => setDialog('clear-progress')}
                   >
-                    清空进度
+                    {t('settings.clearProgress')}
                   </button>
                 </div>
                 <div>
-                  <p className="settings-data-row__title">恢复示例词库</p>
-                  <p className="settings-data-row__desc">删除自建词条与全部进度，回到内置词库初始状态。</p>
+                  <p className="settings-data-row__title">{t('settings.resetSampleTitle')}</p>
+                  <p className="settings-data-row__desc">{t('settings.resetSampleDesc')}</p>
                   <button
                     type="button"
                     className="btn btn--danger btn--sm"
                     onClick={() => setDialog('reset-all')}
                   >
-                    恢复初始数据
+                    {t('settings.resetSample')}
                   </button>
                 </div>
               </div>
@@ -620,18 +625,18 @@ export default function SettingsView() {
         <div className="settings-col settings-col--side">
           <section className="card settings-card">
             <header className="settings-card__head">
-              <span className="settings-card__index">肆</span>
+              <span className="settings-card__index">{t('settings.section4')}</span>
               <div>
-                <h2 className="settings-card__title">外观</h2>
-                <p className="settings-card__sub">纸与墨，各有适合的时刻。</p>
+                <h2 className="settings-card__title">{t('theme.appearanceTitle')}</h2>
+                <p className="settings-card__sub">{t('theme.appearanceSub')}</p>
               </div>
             </header>
             <div className="settings-card__body">
-              <div className="theme-choice" role="group" aria-label="主题">
+              <div className="theme-choice" role="group" aria-label={t('theme.themeGroup')}>
                 {(
                   [
-                    { value: 'light' as const, title: '昼读', desc: '宣纸暖白，适合白天' },
-                    { value: 'dark' as const, title: '夜读', desc: '墨色深底，适合夜晚' },
+                    { value: 'light' as const, titleKey: 'theme.day' as const, descKey: 'theme.dayDesc' as const },
+                    { value: 'dark' as const, titleKey: 'theme.night' as const, descKey: 'theme.nightDesc' as const },
                   ]
                 ).map((choice) => (
                   <button
@@ -650,8 +655,8 @@ export default function SettingsView() {
                       <span />
                     </span>
                     <span className="theme-choice__text">
-                      <strong>{choice.title}</strong>
-                      <span>{choice.desc}</span>
+                      <strong>{t(choice.titleKey)}</strong>
+                      <span>{t(choice.descKey)}</span>
                     </span>
                     {data.theme === choice.value && <IconCheck size={15} />}
                   </button>
@@ -660,65 +665,94 @@ export default function SettingsView() {
             </div>
           </section>
 
+
+          <section className="card settings-card">
+            <header className="settings-card__head">
+              <span className="settings-card__index">{t('settings.sectionLang')}</span>
+              <div>
+                <h2 className="settings-card__title">{t('settings.languageTitle')}</h2>
+                <p className="settings-card__sub">{t('settings.languageSub')}</p>
+              </div>
+            </header>
+            <div className="settings-card__body">
+              <div className="segmented" role="group" aria-label={t('settings.languageTitle')}>
+                {(['en', 'zh-CN'] as Locale[]).map((loc) => (
+                  <button
+                    key={loc}
+                    type="button"
+                    className={cx(
+                      'segmented__option',
+                      locale === loc && 'segmented__option--active',
+                    )}
+                    aria-pressed={locale === loc}
+                    onClick={() => actions.setLocale(loc)}
+                  >
+                    {loc === 'en' ? t('common.languageEn') : t('common.languageZh')}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+
           <section className="card settings-card settings-about">
             <header className="settings-card__head">
-              <span className="settings-card__index">伍</span>
+              <span className="settings-card__index">{t('settings.section5')}</span>
               <div>
-                <h2 className="settings-card__title">关于词渊</h2>
-                <p className="settings-card__sub">以错题为师，以温故为舟。</p>
+                <h2 className="settings-card__title">{t('settings.aboutTitle', { name: t('brand.name') })}</h2>
+                <p className="settings-card__sub">{t('brand.motto')}</p>
               </div>
             </header>
             <div className="settings-card__body">
               <div className="settings-about__brand">
-                <span className="seal">渊</span>
+                <span className="seal">{t('brand.seal')}</span>
                 <div>
-                  <strong>词渊 DeepWord</strong>
-                  <span>v{APP_VERSION} · 本地优先的 LLM 背单词工作台</span>
+                  <strong>{t('brand.name')}</strong>
+                  <span>{t('brand.versionLine', { version: APP_VERSION })}</span>
+                  <span className="hint">{t('settings.aboutAlias')}</span>
                 </div>
               </div>
               <ul className="settings-about__list">
                 <li>
-                  <span>出题引擎</span>
-                  <strong>OpenAI 兼容 / Anthropic</strong>
+                  <span>{t('settings.engine')}</span>
+                  <strong>{t('settings.engineValue')}</strong>
                 </li>
                 <li>
-                  <span>当前配置</span>
+                  <span>{t('settings.activeProfile')}</span>
                   <strong className="settings-about__summary">
                     {activeProfile
-                      ? `${providerName(activeProfile, activeIndex)} · ${providerSummaryText(activeProfile)}`
-                      : '尚未配置'}
+                      ? `${providerName(activeProfile, activeIndex, locale)} · ${providerSummaryText(activeProfile, locale)}`
+                      : t('settings.notConfigured')}
                   </strong>
                 </li>
                 <li>
-                  <span>思考开关</span>
+                  <span>{t('providers.thinking')}</span>
                   <strong className="settings-about__summary">
                     {activeProfile
-                      ? `${thinkingModeLabel(activeProfile.thinkingMode)}${
-                          activeProfile.thinkingMode === 'off' ? '（部分模型可能不生效）' : ''
+                      ? `${thinkingModeLabel(activeProfile.thinkingMode, t)}${
+                          activeProfile.thinkingMode === 'off' ? t('settings.thinkingSwitchNote') : ''
                         }`
                       : '—'}
                   </strong>
                 </li>
                 <li>
-                  <span>提示词版本</span>
+                  <span>{t('settings.promptVersion')}</span>
                   <strong className="settings-about__mono">{FEEDBACK_PROMPT_VERSION}</strong>
                 </li>
                 <li>
-                  <span>记忆算法</span>
-                  <strong>SM-2 变体 · 四档自评</strong>
+                  <span>{t('settings.memoryAlgorithm')}</span>
+                  
                 </li>
                 <li>
-                  <span>数据存储</span>
-                  <strong>浏览器 localStorage</strong>
+                  <span>{t('settings.storageLabel')}</span>
+                  <strong>{t('settings.storageValue')}</strong>
                 </li>
               </ul>
               <p className="settings-about__privacy">
-                你的单词、错题、模型配置与 API Key 都只保存在本机。应用没有后台服务器，不会收集任何学习数据。
-                清除浏览器数据或使用无痕模式会导致记录丢失。
+                {t('settings.privacy')}
               </p>
               <div className="settings-about__foot">
                 <IconSparkle size={14} />
-                <span>错词不是失败，是下一次记住的线索。</span>
+                <span>{t('brand.quoteMistakes')}</span>
               </div>
             </div>
           </section>
@@ -727,48 +761,49 @@ export default function SettingsView() {
 
       <ConfirmDialog
         open={deleteTarget !== null}
-        title="删除这份配置？"
+        title={t('settings.confirmDeleteProvider')}
         message={
           <>
-            将删除「{deleteTarget?.name.trim() || '未命名配置'}」及其保存的 API Key。
-            {deleteTarget && deleteTarget.id === data.activeProviderId
-              ? '这是当前使用的配置，删除后会切换到列表中的第一份；没有其它配置时，AI 功能会退回本地题库。'
-              : '此操作不可撤销。'}
+            {t('settings.confirmDeleteProviderBody', {
+              name: deleteTarget?.name.trim() || t('settings.unnamedProfile'),
+            })}
+            {deleteTarget && deleteTarget.id === data.activeProviderId ? (
+              <span> {t('settings.deleteActiveProviderExtra')}</span>
+            ) : null}
           </>
         }
-        confirmLabel="删除配置"
+        confirmLabel={t('settings.deleteProvider')}
         danger
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
       />
       <ConfirmDialog
         open={dialog === 'import'}
-        title="导入备份？"
+        title={t('settings.confirmImport')}
         message={
           <>
-            将用备份中的词库、学习记录与模型配置<strong>覆盖当前数据</strong>；备份中缺失的 API Key
-            会按 Base URL 继承本机已有 Key。导入后无法撤销，建议先导出一份当前备份。
+            {t('settings.confirmImportBody')} {t('settings.importBackupKeyHint')}
           </>
         }
-        confirmLabel="覆盖并导入"
+        confirmLabel={t('settings.confirmImportButton')}
         danger
         onClose={() => setDialog(null)}
         onConfirm={confirmDialog}
       />
       <ConfirmDialog
         open={dialog === 'clear-progress'}
-        title="清空学习进度？"
-        message="所有卡片排程、错题档案、作答历史与统计都会被清空，词库、模型配置与主题保留。此操作不可撤销。"
-        confirmLabel="清空进度"
+        title={t('settings.confirmClearProgress')}
+        message={t('settings.confirmClearProgressMsg')}
+        confirmLabel="{t('settings.clearProgress')}"
         danger
         onClose={() => setDialog(null)}
         onConfirm={confirmDialog}
       />
       <ConfirmDialog
         open={dialog === 'reset-all'}
-        title="恢复初始数据？"
-        message="将删除所有自建词条与学习进度，并载入内置示例词库。模型配置与主题会保留。此操作不可撤销。"
-        confirmLabel="恢复初始数据"
+        title="{t('settings.resetSample')}？"
+        message={t('settings.confirmResetMsg')}
+        confirmLabel="{t('settings.resetSample')}"
         danger
         onClose={() => setDialog(null)}
         onConfirm={confirmDialog}

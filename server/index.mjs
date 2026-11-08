@@ -1,4 +1,4 @@
-// DeepWord 生产模式服务入口：node server/index.mjs
+// dpdp-word production server: node server/index.mjs
 //
 // - /api/* 交给 server/proxy.mjs（/api/health、/api/llm/forward）
 // - 其余路径托管 dist/（SPA fallback 到 index.html）
@@ -54,14 +54,14 @@ async function main() {
     return;
   }
 
-  console.log(`DeepWord 本地服务已启动：${started.url}`);
-  console.log('按 Ctrl+C 停止。');
+  console.log(`dpdp-word local server: ${started.url}`);
+  console.log('Press Ctrl+C to stop.');
 
   let shuttingDown = false;
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log('正在停止 DeepWord 本地服务…');
+    console.log('Stopping dpdp-word local server…');
     try {
       await started.close();
     } catch {

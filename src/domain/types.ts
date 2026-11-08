@@ -1,10 +1,8 @@
-/**
- * 词渊 DeepWord v3 —— 领域类型契约（唯一来源）。
- */
-
 export type ViewId = 'dashboard' | 'study' | 'wordbook' | 'settings';
 
 export type ThemeMode = 'light' | 'dark';
+
+export type AppLocale = 'en' | 'zh-CN';
 
 /* ------------------------------------------------------------------ */
 /* 单词                                                                */
@@ -249,6 +247,8 @@ export interface AppData {
   attempts: Attempt[];
   mistakes: Record<string, Mistake>;
   theme: ThemeMode;
+  /** UI locale; omitted in older payloads → default `en`. */
+  locale?: AppLocale;
   stats: LearningStats;
   createdAt: number;
   updatedAt: number;

@@ -8,8 +8,7 @@ export default defineConfig({
   plugins: [
     react(),
     {
-      // Phase A 本地同源代理：dev server 挂 /api（见 docs/phase-a-contract.md）。
-      name: 'deepword-local-proxy',
+      name: 'dpdp-word-local-proxy',
       configureServer(server) {
         server.middlewares.use(createViteMiddleware());
       },

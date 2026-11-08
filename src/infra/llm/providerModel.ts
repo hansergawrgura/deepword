@@ -15,6 +15,7 @@ import {
   type Vendor,
 } from '@/domain/types';
 import { clamp, uid } from '@/domain/utils';
+import { createT, DEFAULT_LOCALE, type Locale } from '@/i18n';
 
 /* ------------------------------------------------------------------ */
 /* 厂商                                                                */
@@ -33,79 +34,6 @@ export const VENDOR_OPTIONS: ReadonlyArray<{ value: Vendor; label: string }> = [
   { value: 'minimax', label: 'MiniMax' },
   { value: 'custom', label: '其他 / 自定义' },
 ];
-
-/** 厂商预填：只用于「填入预设」按钮，不强制。 */
-export const VENDOR_PRESETS: Record<
-  Vendor,
-  { protocol: ProviderKind; baseUrl: string; model: string; hint: string }
-> = {
-  openai: {
-    protocol: 'openai',
-    baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o-mini',
-    hint: 'OpenAI 官方接口',
-  },
-  anthropic: {
-    protocol: 'anthropic',
-    baseUrl: 'https://api.anthropic.com/v1',
-    model: 'claude-sonnet-4-5',
-    hint: 'Anthropic Messages API',
-  },
-  deepseek: {
-    protocol: 'openai',
-    baseUrl: 'https://api.deepseek.com/v1',
-    model: 'deepseek-chat',
-    hint: 'DeepSeek；思考默认开启，可在此关闭',
-  },
-  qwen: {
-    protocol: 'openai',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    model: 'qwen-plus',
-    hint: 'DashScope 兼容模式',
-  },
-  ollama: {
-    protocol: 'openai',
-    baseUrl: 'http://localhost:11434/v1',
-    model: 'qwen2.5:7b',
-    hint: '本地 Ollama，可不填 Key',
-  },
-  kimi: {
-    protocol: 'openai',
-    baseUrl: 'https://api.moonshot.cn/v1',
-    model: 'moonshot-v1-8k',
-    hint: 'Kimi / Moonshot',
-  },
-  glm: {
-    protocol: 'openai',
-    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    model: 'glm-4-flash',
-    hint: '智谱 GLM',
-  },
-  siliconflow: {
-    protocol: 'openai',
-    baseUrl: 'https://api.siliconflow.cn/v1',
-    model: 'deepseek-ai/DeepSeek-V3',
-    hint: '硅基流动',
-  },
-  volcengine: {
-    protocol: 'anthropic',
-    baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
-    model: 'deepseek-v4.1-flash',
-    hint: '火山方舟 Ark（Anthropic 兼容）；Coding 计划 Base URL 填 /api/coding，模型以套餐列表为准',
-  },
-  minimax: {
-    protocol: 'openai',
-    baseUrl: 'https://api.minimax.chat/v1',
-    model: 'MiniMax-Text-01',
-    hint: 'MiniMax',
-  },
-  custom: {
-    protocol: 'openai',
-    baseUrl: '',
-    model: '',
-    hint: '任意 OpenAI 兼容 / Anthropic 兼容服务',
-  },
-};
 
 export function vendorLabel(vendor: Vendor): string {
   return VENDOR_OPTIONS.find((item) => item.value === vendor)?.label ?? '其他';
@@ -161,9 +89,9 @@ export function resolveActiveLLMSettings(data: AppData): LLMSettings | null {
   return profile ? toLLMSettings(profile) : null;
 }
 
-/** 设置页/关于页展示用：厂商 + 模型。 */
-export function providerSummaryText(profile: ProviderProfile): string {
-  const model = profile.defaultModel.trim() || '未填模型';
+export function providerSummaryText(profile: ProviderProfile, locale: Locale = DEFAULT_LOCALE): string {
+  const t = createT(locale);
+  const model = profile.defaultModel.trim() || t('providers.modelNotFilled');
   return `${vendorLabel(profile.vendor)} · ${model}`;
 }
 
@@ -176,35 +104,36 @@ export interface UrlCheck {
   message?: string;
 }
 
-/** Base URL 必须是 http(s) 且能解析出主机。 */
-export function checkBaseUrl(baseUrl: string): UrlCheck {
+export function checkBaseUrl(baseUrl: string, locale: Locale = DEFAULT_LOCALE): UrlCheck {
+  const t = createT(locale);
   const value = baseUrl.trim();
-  if (!value) return { ok: false, message: '请填写 Base URL，例如 https://api.deepseek.com/v1。' };
+  if (!value) return { ok: false, message: t('providers.baseUrlRequired') };
   let parsed: URL;
   try {
     parsed = new URL(value);
   } catch {
-    return { ok: false, message: 'Base URL 不是合法网址。' };
+    return { ok: false, message: t('providers.baseUrlInvalid') };
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return { ok: false, message: 'Base URL 只支持 http:// 或 https://。' };
+    return { ok: false, message: t('providers.baseUrlProtocol') };
   }
-  if (!parsed.hostname) return { ok: false, message: 'Base URL 缺少主机名。' };
+  if (!parsed.hostname) return { ok: false, message: t('providers.baseUrlHost') };
   return { ok: true };
 }
 
-export function providerName(profile: ProviderProfile, index: number): string {
-  return profile.name.trim() || `配置 ${index + 1}`;
+export function providerName(profile: ProviderProfile, index: number, locale: Locale = DEFAULT_LOCALE): string {
+  const t = createT(locale);
+  return profile.name.trim() || t('providers.unnamedProfileIndex', { index: index + 1 });
 }
 
-/** 迁移 v1 的单份 settings → 一份 profile。 */
+/** Convert a legacy single-settings blob into one profile (no default Base URL seeded). */
 export function legacySettingsToProfile(settings: LegacyLLMSettings, now = Date.now()): ProviderProfile {
   const protocol: ProviderKind = settings.provider === 'anthropic' ? 'anthropic' : 'openai';
   const baseUrl = settings.baseUrl.trim();
   const model = settings.model.trim();
   return {
     id: uid('p'),
-    name: '默认配置',
+    name: createT(DEFAULT_LOCALE)('providers.defaultProfileName'),
     protocol,
     vendor: inferVendorFromBaseUrl(baseUrl, protocol),
     baseUrl,
@@ -219,18 +148,10 @@ export function legacySettingsToProfile(settings: LegacyLLMSettings, now = Date.
   };
 }
 
-export function createInitialProviders(now = Date.now()): ProviderProfile[] {
-  return [legacySettingsToProfile({ ...DEFAULT_LEGACY_SETTINGS }, now)];
+/** Fresh installs start with no providers — Base URLs are user-supplied and tested. */
+export function createInitialProviders(_now = Date.now()): ProviderProfile[] {
+  return [];
 }
-
-export const DEFAULT_LEGACY_SETTINGS: LegacyLLMSettings = {
-  provider: 'openai',
-  baseUrl: 'https://api.openai.com/v1',
-  apiKey: '',
-  model: 'gpt-4o-mini',
-  temperature: 0.7,
-  maxTokens: 2_500,
-};
 
 /* ------------------------------------------------------------------ */
 /* 导入备份：保留本机 Key                                               */

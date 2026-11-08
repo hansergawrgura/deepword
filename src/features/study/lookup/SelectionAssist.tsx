@@ -3,6 +3,7 @@
  */
 
 import { useEffect, useState, type RefObject } from 'react';
+import { useT } from '@/i18n';
 import { IconSparkle } from '@/ui/icons';
 import type { LookupAnchor } from './useStudyLookup';
 
@@ -27,6 +28,7 @@ function selectionInside(root: HTMLElement, selection: Selection): boolean {
 }
 
 export default function SelectionAssist({ rootRef, onExplain }: SelectionAssistProps) {
+  const t = useT();
   const [assist, setAssist] = useState<AssistState | null>(null);
 
   useEffect(() => {
@@ -84,8 +86,8 @@ export default function SelectionAssist({ rootRef, onExplain }: SelectionAssistP
       type="button"
       className="study-selection-assist"
       style={{ top: assist.top, left: assist.left }}
-      title="翻译 / 解析选中内容"
-      aria-label="翻译或解析选中内容"
+      title={t('study.selectionTitle')}
+      aria-label={t('study.selectionTitle')}
       onMouseDown={(event) => {
         // 避免 mousedown 清掉选区。
         event.preventDefault();

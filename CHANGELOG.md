@@ -8,6 +8,26 @@
 
 ## [Unreleased]
 
+### 文档（Docs）
+
+- 新增 `docs/`：编码规范、版本迭代、文档更新约定；`AGENTS.md` 指向 docs。
+
+### 变更（Changed）
+
+- 项目更名为 **dpdp-word** / **DeepDeep Word**（中文：深深单词 / 肥鱼单词）；去掉「词渊」品牌文案。
+- 技术标识集中到 `src/app/identity.ts`；本地键改为 `dpdp-word:data:v3`。
+- 新增轻量 i18n（`en` 默认 + `zh-CN`），用户文案进 catalogs。
+- 不再预置任何默认 LLM provider（含未验证的 OpenAI Base URL）；需用户自行添加并测试连接。
+- 移除厂商「填入预设」（`VENDOR_PRESETS`）：Base URL / 模型需用户自行填写，厂商选择仅影响思考参数映射与 Base URL 推断。
+
+### 迁移（Migration）
+
+- 启动时若存在合法 `deepword:data:v3`，写入新键后清除全部 `deepword:*` 旧键；备份 `app`/`scheme` 改为 `dpdp-word` / `dpdp-word-backup`（仍接受旧备份标识）。
+
+### 移除（Removed）
+
+- 删除 `.workbuddy/`（含失效的 deepword-release skill）。
+
 ---
 
 ## [2.0.0] - 2026-11-08

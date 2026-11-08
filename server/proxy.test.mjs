@@ -1,10 +1,3 @@
-// server/proxy.test.mjs
-//
-// 用 node:http 起 mock 上游 + 代理（端口 0），覆盖 docs/phase-a-contract.md
-// 「本地代理线协议」的可测行为：
-// 健康检查、JSON 透传（含上游 401 body）、SSE 逐块透传、头剥离、
-// 302 不跟随、坏 url 400、超大 body 413、超时 504（注入 300ms）、客户端 abort 取消上游。
-
 import http from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 

@@ -1,21 +1,4 @@
-// DeepWord 本地同源代理（Phase A）
-//
-// 职责：
-// - dev：作为 Vite 中间件，只接管 /api，其余交回 next。
-// - prod：startServer() 托管 dist/ 并提供同一套 /api。
-// - 线协议见 docs/phase-a-contract.md「本地代理线协议」：
-//   POST /api/llm/forward、GET /api/health。
-//
-// 安全与隐私约束（必须）：
-// - 仅允许 http/https 上游，拒绝 file:/data: 等协议。
-// - 只转发头白名单，显式剥离 Origin/Referer/Cookie。
-// - redirect:'manual'，不跟随重定向。
-// - 不打印、不记录请求 body / headers（API Key 不落日志）。
-// - 不缓存；所有响应带 Cache-Control: no-store / no-cache。
-// - 上游“连接”（拿到响应头）超时 20s，总超时 90s；客户端断开即 abort 上游。
-//
-// 可测试性注入：createApiHandler({ timeoutMs }) 只用于测试把超时缩短（如 300ms），
-// 生产默认值固定为契约规定的 20000/90000，不暴露给调用方配置。
+// dpdp-word same-origin LLM proxy (dev Vite middleware + prod static server).
 
 import http from 'node:http';
 import fsp from 'node:fs/promises';

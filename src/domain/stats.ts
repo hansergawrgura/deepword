@@ -1,5 +1,8 @@
 /** 统计与错题分析（v3：无 SRS / 闪卡）。 */
 
+import type { Locale } from '@/i18n/types';
+import { DEFAULT_LOCALE } from '@/i18n/types';
+import { createT } from '@/i18n/t';
 import type { AppData, Attempt, DailyStat, LearningStats, Mistake, Word } from './types';
 import { isMastered } from './mastery';
 import { dayKey, percent } from './utils';
@@ -12,11 +15,16 @@ export const WORD_LEARNING_STATUS_META: Record<
   WordLearningStatus,
   { label: string; tone: 'muted' | 'vermilion' | 'gold' | 'sage' }
 > = {
-  new: { label: '新词', tone: 'muted' },
-  learning: { label: '学习中', tone: 'vermilion' },
-  review: { label: '复习中', tone: 'gold' },
-  mastered: { label: '已掌握', tone: 'sage' },
+  new: { label: 'New', tone: 'muted' },
+  learning: { label: 'Learning', tone: 'vermilion' },
+  review: { label: 'In review', tone: 'gold' },
+  mastered: { label: 'Mastered', tone: 'sage' },
 };
+
+export function wordStatusLabel(status: WordLearningStatus, locale: Locale = DEFAULT_LOCALE): string {
+  const t = createT(locale);
+  return t(`domain.status.${status}`);
+}
 
 export interface Overview {
   totalWords: number;

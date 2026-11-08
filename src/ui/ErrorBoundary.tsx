@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { createT, DEFAULT_LOCALE } from '@/i18n';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -9,36 +10,35 @@ interface ErrorBoundaryState {
   message: string;
 }
 
-/** 最外层错误边界：任何渲染异常都给出可恢复的说明，而不是白屏。 */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { hasError: false, message: '' };
 
   static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
+    const t = createT(DEFAULT_LOCALE);
     return {
       hasError: true,
-      message: error instanceof Error ? error.message : '未知错误',
+      message: error instanceof Error ? error.message : t('common.unknownError'),
     };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('[DeepWord] 渲染错误', error, info.componentStack);
+    console.error('[dpdp-word] render error', error, info.componentStack);
   }
 
   render() {
     if (!this.state.hasError) return this.props.children;
 
+    const t = createT(DEFAULT_LOCALE);
     return (
       <div className="app-crash">
         <div className="card app-crash__card">
-          <span className="seal">渊</span>
-          <h1 className="app-crash__title">页面遇到了些问题</h1>
-          <p className="app-crash__desc">
-            你的学习数据保存在本机浏览器里，通常不会丢失。刷新页面可以继续；如果反复出现，可以导出备份后在设置中恢复初始数据。
-          </p>
+          <span className="seal">{t('brand.seal')}</span>
+          <h1 className="app-crash__title">{t('errorBoundary.title')}</h1>
+          <p className="app-crash__desc">{t('errorBoundary.desc')}</p>
           <p className="app-crash__detail">{this.state.message}</p>
           <div className="app-crash__actions">
             <button type="button" className="btn btn--primary" onClick={() => window.location.reload()}>
-              刷新页面
+              {t('errorBoundary.reload')}
             </button>
             <button
               type="button"
@@ -48,7 +48,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 window.location.reload();
               }}
             >
-              前往设置
+              {t('errorBoundary.goSettings')}
             </button>
           </div>
         </div>

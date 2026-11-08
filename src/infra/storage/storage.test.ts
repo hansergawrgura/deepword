@@ -1,9 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { SEED_WORDS } from '@/data/wordbanks';
-import { DATA_VERSION, DEFAULT_PRACTICE_SETTINGS } from '@/domain/types';
 import {
+  BACKUP_APP,
+  BACKUP_SCHEME,
+  DATA_VERSION,
   LEGACY_STORAGE_KEYS,
+  LEGACY_V3_STORAGE_KEY,
   STORAGE_KEY,
+} from '@/app/identity';
+import { SEED_WORDS } from '@/data/wordbanks';
+import { DEFAULT_PRACTICE_SETTINGS } from '@/domain/types';
+import {
   clearStoredData,
   createInitialData,
   exportBackup,
@@ -85,7 +91,7 @@ describe('saveData / loadData', () => {
     expect(loaded.data.version).toBe(3);
   });
 
-  it('无 v3 键时清除旧键并写入新数据', () => {
+  it('无当前键时清除旧键并写入新数据', () => {
     const { store } = withLocalStorage();
     store.set('deepword:data:v2', JSON.stringify({ version: 2, words: [] }));
     store.set('deepword:data:v1', '{}');
@@ -98,13 +104,30 @@ describe('saveData / loadData', () => {
     expect(store.has(STORAGE_KEY)).toBe(true);
   });
 
-  it('v3 键内版本不对时清除旧键并重建', () => {
+  it('从 deepword:data:v3 迁移到当前键并清除 legacy', () => {
+    const { store } = withLocalStorage();
+    const seed = createInitialData(NOW);
+    seed.words = seed.words.slice(0, 3);
+    store.set(LEGACY_V3_STORAGE_KEY, JSON.stringify(seed));
+    store.set('deepword:data:v2', '{}');
+
+    const result = loadData(NOW);
+    expect(result.warning).toBeUndefined();
+    expect(result.data.words).toHaveLength(3);
+    expect(store.has(STORAGE_KEY)).toBe(true);
+    expect(store.has(LEGACY_V3_STORAGE_KEY)).toBe(false);
+    expect(store.has('deepword:data:v2')).toBe(false);
+    const written = JSON.parse(store.get(STORAGE_KEY) ?? 'null');
+    expect(written.words).toHaveLength(3);
+  });
+
+  it('当前键内版本不对时清除旧键并重建', () => {
     const { store } = withLocalStorage();
     store.set('deepword:data:v2', '{}');
     store.set(STORAGE_KEY, JSON.stringify({ version: 2, words: [{ id: 'w1', term: 'x', meaning: 'y' }] }));
 
     const result = loadData(NOW);
-    expect(result.warning).toMatch(/版本不匹配/);
+    expect(result.warning).toMatch(/version mismatch/i);
     expect(result.data.version).toBe(3);
     expect(result.data.words.length).toBe(SEED_WORDS.length);
     expect(store.has('deepword:data:v2')).toBe(false);
@@ -127,12 +150,26 @@ describe('clearStoredData', () => {
 describe('importBackup', () => {
   it('接受 v3 包装与裸 v3 数据', () => {
     const data = createInitialData(NOW);
+    const wrapped = JSON.parse(exportBackup(data));
+    expect(wrapped.app).toBe(BACKUP_APP);
+    expect(wrapped.scheme).toBe(BACKUP_SCHEME);
     const fromWrapper = importBackup(exportBackup(data));
     expect(fromWrapper.version).toBe(3);
     expect(fromWrapper.words.length).toBe(data.words.length);
 
     const bare = JSON.stringify({ ...data, version: 3 });
     expect(importBackup(bare).words.length).toBe(data.words.length);
+  });
+
+  it('接受旧 deepword 备份标识', () => {
+    const data = createInitialData(NOW);
+    const legacy = JSON.stringify({
+      app: 'deepword',
+      scheme: 'deepword-backup',
+      version: 3,
+      data: { ...data, version: 3 },
+    });
+    expect(importBackup(legacy).words.length).toBe(data.words.length);
   });
 
   it('拒绝非 v3 备份', () => {
@@ -159,6 +196,6 @@ describe('hydrateData', () => {
         { version: 2, words: [{ id: 'w1', term: 'a', meaning: 'b', createdAt: NOW }] },
         { now: NOW },
       ),
-    ).toThrow(/版本 3/);
+    ).toThrow(/version 3/i);
   });
 });

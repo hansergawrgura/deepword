@@ -1,6 +1,7 @@
 import type { ViewProps } from '@/domain/types';
 import { cx, percent, weekdayName } from '@/domain/utils';
 import { newQuestionCount, reviewQuestionCount } from '@/domain/practiceRound';
+import { useLocale, useT } from '@/i18n';
 import { IconBook, IconHome } from '@/ui/icons';
 import Flashcard, { DEFAULT_GATE_SCHEDULE } from './Flashcard';
 import LookupPopover from './lookup/LookupPopover';
@@ -12,6 +13,8 @@ import { useStudyController } from './useStudyController';
 import './StudyView.css';
 
 export default function StudyView({ navigate }: ViewProps) {
+  const t = useT();
+  const locale = useLocale();
   const c = useStudyController();
   const answering = Boolean(c.question) && (c.stage === 'new' || c.stage === 'review');
   const currentWord = c.question
@@ -24,6 +27,15 @@ export default function StudyView({ navigate }: ViewProps) {
     question: c.question,
     word: currentWord,
   });
+
+  const resumeStageHint =
+    c.resumable?.stage === 'gate'
+      ? t('study.resumeAtGate')
+      : c.resumable?.stage === 'new'
+        ? t('study.resumeAtNew')
+        : c.resumable?.stage === 'review'
+          ? t('study.resumeAtReview')
+          : '';
 
   return (
     <div className={cx('study', answering && 'study--answering')}>
@@ -47,7 +59,7 @@ export default function StudyView({ navigate }: ViewProps) {
               aria-valuemin={0}
               aria-valuemax={c.roundQuestions}
               aria-valuenow={c.roundIndex}
-              aria-label="本轮进度"
+              aria-label={t('study.progressAria')}
             >
               <div
                 className="progress__bar"
@@ -56,12 +68,20 @@ export default function StudyView({ navigate }: ViewProps) {
             </div>
             <div className="study-progress__meta">
               <span>
-                第 {c.session?.roundNo ?? 1} 轮 · {c.planVisible ? '待继续' : c.stageLabel} · 第{' '}
-                {c.roundIndex} / {c.roundQuestions} 题
+                {t('study.progressMeta', {
+                  roundNo: c.session?.roundNo ?? 1,
+                  stage: c.planVisible ? t('study.stagePending') : c.stageLabel,
+                  index: c.roundIndex,
+                  total: c.roundQuestions,
+                })}
               </span>
               <span>
-                已答 {c.session?.answered ?? 0} 题
-                {c.summary ? ` · 正确率 ${c.summary.accuracy}%` : ''}
+                {c.summary
+                  ? t('study.answeredMeta', {
+                      answered: c.session?.answered ?? 0,
+                      accuracy: c.summary.accuracy,
+                    })
+                  : t('study.answeredOnly', { answered: c.session?.answered ?? 0 })}
               </span>
             </div>
           </div>
@@ -70,13 +90,13 @@ export default function StudyView({ navigate }: ViewProps) {
 
       <div className="study-bar">
         <span className="study-bar__stage" title={c.studyHint}>
-          {weekdayName(c.nowTs)} · {c.stageLabel}
+          {weekdayName(c.nowTs, locale)} · {c.stageLabel}
         </span>
         <div className="study-bar__actions">
           {c.session && !c.planVisible ? (
             <button type="button" className="btn btn--quiet btn--sm" onClick={c.finishRound}>
               {c.stage === 'done' ? <IconHome size={14} /> : null}
-              {c.stage === 'done' ? '回概览' : '结束本轮'}
+              {c.stage === 'done' ? t('study.backOverview') : t('study.endRound')}
             </button>
           ) : (
             <button
@@ -85,7 +105,7 @@ export default function StudyView({ navigate }: ViewProps) {
               onClick={() => navigate('wordbook')}
             >
               <IconBook size={14} />
-              去词库
+              {t('study.goWordbook')}
             </button>
           )}
         </div>
@@ -94,16 +114,20 @@ export default function StudyView({ navigate }: ViewProps) {
       <div className="view-stage view-stage--fixed">
         <div className="view-stage__inner">
           {c.planVisible ? (
-            <section className="study-sheet enter-up" aria-label="本轮计划">
+            <section className="study-sheet enter-up" aria-label={t('study.planTitle')}>
               <span className="seal study-sheet__seal" aria-hidden="true">
-                温
+                {t('dashboard.watermarkWarm')}
               </span>
               <div className="study-sheet__body">
                 <header className="study-sheet__head">
-                  <h2 className="study-sheet__title">本轮计划</h2>
+                  <h2 className="study-sheet__title">{t('study.planTitle')}</h2>
                   <p className="study-sheet__sub">
-                    第 {c.plan.roundNo} 轮 · 一轮 = {c.plan.newWords.length} 个新词 +{' '}
-                    {c.plan.reviewWords.length} 个复习词；今日已学 {c.todayReviewed} 次。
+                    {t('study.planSub', {
+                      roundNo: c.plan.roundNo,
+                      newCount: c.plan.newWords.length,
+                      reviewCount: c.plan.reviewWords.length,
+                      todayReviewed: c.todayReviewed,
+                    })}
                   </p>
                 </header>
 
@@ -111,10 +135,10 @@ export default function StudyView({ navigate }: ViewProps) {
                   <div className="study-empty">
                     <div className="empty-state">
                       <span className="empty-state__mark" aria-hidden="true">
-                        空
+                        {t('common.emptyMark')}
                       </span>
-                      <h2 className="empty-state__title">词库还是空的</h2>
-                      <p className="empty-state__desc">先收几个想记的词，再回来温故。</p>
+                      <h2 className="empty-state__title">{t('study.emptyWordbook')}</h2>
+                      <p className="empty-state__desc">{t('study.emptyWordbookDesc')}</p>
                       <div className="study-empty__actions">
                         <button
                           type="button"
@@ -122,7 +146,7 @@ export default function StudyView({ navigate }: ViewProps) {
                           onClick={() => navigate('wordbook')}
                         >
                           <IconBook size={16} />
-                          去词库添加
+                          {t('study.goWordbookAdd')}
                         </button>
                       </div>
                     </div>
@@ -131,22 +155,20 @@ export default function StudyView({ navigate }: ViewProps) {
                   <>
                     {c.resumable ? (
                       <div className="study-resume" role="status">
-                        <p className="study-resume__title">上一轮还没结束</p>
+                        <p className="study-resume__title">{t('study.resumeTitle')}</p>
                         <p className="study-resume__desc">
-                          第 {c.resumable.roundNo ?? 1} 轮，已答 {c.resumable.answered ?? 0} 题
-                          {c.resumable.stage === 'gate'
-                            ? '，还停在新词闸门'
-                            : c.resumable.stage === 'new'
-                              ? '，还在新词练习'
-                              : '，还在复习'}
-                          。继续会回到原来的位置。
+                          {t('study.resumeDesc', {
+                            roundNo: c.resumable.roundNo ?? 1,
+                            answered: c.resumable.answered ?? 0,
+                            stageHint: resumeStageHint,
+                          })}
                         </p>
                         <div className="study-resume__actions">
                           <button type="button" className="btn btn--primary" onClick={c.resumeRound}>
-                            继续上一轮
+                            {t('study.continueLast')}
                           </button>
                           <button type="button" className="btn btn--ghost" onClick={c.startRound}>
-                            重新开始一轮
+                            {t('study.restartRound')}
                           </button>
                         </div>
                       </div>
@@ -154,63 +176,71 @@ export default function StudyView({ navigate }: ViewProps) {
 
                     <div className="study-figures">
                       <div className="study-figure">
-                        <span className="study-figure__label">新词</span>
+                        <span className="study-figure__label">{t('study.figureNew')}</span>
                         <span className="study-figure__value">
                           {c.plan.newWords.length}
-                          <em>个</em>
+                          {locale === 'zh-CN' ? <em>{t('dashboard.statUnitWords')}</em> : null}
                         </span>
                         <span className="study-figure__note">
-                          本轮 {c.plan.newWords.length > 0 ? newQuestionCount(c.data.practice) : 0}{' '}
-                          题 / 词
+                          {t('study.questionsPerWord', {
+                            count:
+                              c.plan.newWords.length > 0 ? newQuestionCount(c.data.practice) : 0,
+                          })}
                         </span>
                       </div>
                       <div className="study-figure">
-                        <span className="study-figure__label">复习</span>
+                        <span className="study-figure__label">{t('study.figureReview')}</span>
                         <span className="study-figure__value">
                           {c.plan.reviewWords.length}
-                          <em>个</em>
+                          {locale === 'zh-CN' ? <em>{t('dashboard.statUnitWords')}</em> : null}
                         </span>
                         <span className="study-figure__note">
-                          本轮{' '}
-                          {reviewQuestionCount(
-                            c.data.practice,
-                            Math.max(1, c.plan.reviewWords.length),
-                          )}{' '}
-                          题
+                          {t('study.reviewQuestions', {
+                            count: reviewQuestionCount(
+                              c.data.practice,
+                              Math.max(1, c.plan.reviewWords.length),
+                            ),
+                          })}
                         </span>
                       </div>
                       <div className="study-figure">
-                        <span className="study-figure__label">掌握度</span>
+                        <span className="study-figure__label">{t('study.figureMastery')}</span>
                         <span className="study-figure__value">
                           {c.masteryRate}
                           <em>%</em>
                         </span>
-                        <span className="study-figure__note">已掌握 {c.available.mastered} 词</span>
+                        <span className="study-figure__note">
+                          {t('study.masteredCount', { count: c.available.mastered })}
+                        </span>
                       </div>
                     </div>
 
                     <div className="study-setup">
                       <div className="study-setup__mode">
-                        <span className="study-setup__label">这一轮怎么走</span>
+                        <span className="study-setup__label">{t('study.flowTitle')}</span>
                         <ol className="study-flow">
-                          <li>新词先过闸门：认识就出题，掌握就永久记住。</li>
+                          <li>{t('study.flow1')}</li>
                           <li>
-                            {c.data.practice.newWordsPerRound} 个新词，每个{' '}
-                            {c.data.practice.questionsPerNewWord} 题，覆盖 6 个技能。
+                            {t('study.flow2', {
+                              newWords: c.data.practice.newWordsPerRound,
+                              questionsPerWord: c.data.practice.questionsPerNewWord,
+                            })}
                           </li>
                           <li>
-                            复习 {c.data.practice.reviewWordsPerRound} 个词（
-                            {c.data.practice.reviewQuestionsPerRound} 题），按薄弱度优先。
+                            {t('study.flow3', {
+                              reviewWords: c.data.practice.reviewWordsPerRound,
+                              reviewQuestions: c.data.practice.reviewQuestionsPerRound,
+                            })}
                           </li>
-                          <li>小结之后点「继续」，进入下一轮。</li>
+                          <li>{t('study.flow4')}</li>
                         </ol>
                       </div>
 
                       <div className="study-setup__cta">
                         <span className="study-setup__count">
                           {c.available.newWords > 0 || c.available.reviewWords > 0
-                            ? '准备好了就开始'
-                            : '今天没有待学的词'}
+                            ? t('study.ready')
+                            : t('study.nothingToday')}
                         </span>
                         <button
                           type="button"
@@ -218,11 +248,11 @@ export default function StudyView({ navigate }: ViewProps) {
                           disabled={c.available.newWords === 0 && c.available.reviewWords === 0}
                           onClick={c.startRound}
                         >
-                          开始一轮
+                          {t('study.startRound')}
                         </button>
                         <span className="study-setup__key">
-                          {c.aiAvailable ? '互译题可用' : '未配置 AI · 互译题不出'}
-                          {c.ttsAvailable ? '' : ' · 无英文语音，听音题不出'}
+                          {c.aiAvailable ? t('study.aiOn') : t('study.aiOff')}
+                          {c.ttsAvailable ? '' : t('study.ttsOff')}
                         </span>
                       </div>
                     </div>
@@ -255,32 +285,28 @@ export default function StudyView({ navigate }: ViewProps) {
 
               {c.gateFlipped ? (
                 <div className="practice-gate">
-                  <p className="practice-gate__ask">确认已经掌握这个词？</p>
-                  <p className="practice-gate__hint">
-                    确认后它将永久退出学习与复习队列；点「再想想」继续出题。
-                  </p>
+                  <p className="practice-gate__ask">{t('study.gateConfirm')}</p>
+                  <p className="practice-gate__hint">{t('study.gateConfirmHint')}</p>
                   <div className="practice-gate__actions">
                     <button type="button" className="btn btn--ghost" onClick={c.handleGateUnknown}>
-                      再想想
+                      {t('study.thinkAgain')}
                     </button>
                     <button type="button" className="btn btn--primary" onClick={c.handleGateConfirm}>
-                      确认掌握
+                      {t('study.confirmMaster')}
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="practice-gate" role="group" aria-label="新词闸门">
+                <div className="practice-gate" role="group" aria-label={t('study.stageGate')}>
                   <div className="practice-gate__actions">
                     <button type="button" className="btn btn--ghost" onClick={c.handleGateUnknown}>
-                      不认识
+                      {t('study.unknown')}
                     </button>
                     <button type="button" className="btn btn--primary" onClick={c.handleGateMasterIntent}>
-                      掌握
+                      {t('study.master')}
                     </button>
                   </div>
-                  <p className="practice-gate__hint">
-                    点「掌握」会翻面显示释义，并再问你一次；确定才作数。
-                  </p>
+                  <p className="practice-gate__hint">{t('study.gateFlipHint')}</p>
                 </div>
               )}
             </div>
@@ -305,19 +331,19 @@ export default function StudyView({ navigate }: ViewProps) {
               onSpeak={c.speak}
             />
           ) : (
-            <section className="study-sheet enter-up" aria-label="本轮概览">
+            <section className="study-sheet enter-up" aria-label={t('study.stageOverview')}>
               <div className="study-sheet__body">
                 <header className="study-sheet__head">
-                  <h2 className="study-sheet__title">这一轮已经排好了</h2>
-                  <p className="study-sheet__sub">点「开始一轮」继续下一轮学习。</p>
+                  <h2 className="study-sheet__title">{t('study.scheduledTitle')}</h2>
+                  <p className="study-sheet__sub">{t('study.scheduledSub')}</p>
                 </header>
                 <div className="study-setup">
                   <div className="study-setup__cta">
                     <button type="button" className="btn btn--primary" onClick={c.resumeRound}>
-                      继续这一轮
+                      {t('study.continueRound')}
                     </button>
                     <button type="button" className="btn btn--ghost" onClick={c.startRound}>
-                      重开一轮
+                      {t('study.reopenRound')}
                     </button>
                   </div>
                 </div>

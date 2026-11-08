@@ -1,11 +1,3 @@
-/**
- * 薄弱分析单测（vitest / node 环境）。
- *
- * 口径来源：docs/phase-b-contract.md 第 4 节。
- * 覆盖：getSkillStats 的正确率（百分整数）与无作答 null、getWeaknessReport 的
- * weakestSkill / weakestWords / focus、scoreWordWeakness 的错误权重与闪卡标记加权。
- */
-
 import { describe, expect, it } from 'vitest';
 import type { AppData, Attempt, MasteryRecord, Skill, Word } from './types';
 import { emptyAppData } from './fixtures';
@@ -53,7 +45,7 @@ describe('getSkillStats', () => {
       'sentence',
       'translate',
     ]);
-    expect(stats[0].label).toBe('英译中');
+    expect(stats[0].label).toBe('EN→ZH');
   });
 
   it('正确率是百分整数，无作答的技能为 null', () => {
@@ -114,7 +106,7 @@ describe('getWeaknessReport', () => {
     expect(report.practiced).toBe(false);
     expect(report.weakestSkill).toBeNull();
     expect(report.weakestWords).toEqual([]);
-    expect(report.focus).toContain('先完成一轮练习');
+    expect(report.focus).toContain('Finish a round');
   });
 
   it('最弱技能是正确率最低的那个', () => {
@@ -130,8 +122,8 @@ describe('getWeaknessReport', () => {
     const report = getWeaknessReport(data, { now: NOW });
     expect(report.practiced).toBe(true);
     expect(report.weakestSkill).toBe('spell');
-    expect(report.focus).toContain('最弱');
-    expect(report.focus).toContain('拼写');
+    expect(report.focus).toContain('most work');
+    expect(report.focus).toContain('Spelling');
   });
 
   it('最弱词只含有过错的词，按薄弱度降序排列', () => {

@@ -1,5 +1,7 @@
 import type { Word } from '@/domain/types';
 import { cx } from '@/domain/utils';
+import { useT } from '@/i18n';
+import type { TranslateFn } from '@/i18n';
 import { IconVolume } from '@/ui/icons';
 
 export interface FlashcardSchedule {
@@ -20,13 +22,6 @@ export interface FlashcardProps {
   onSpeak: () => void;
 }
 
-const STATUS_META = {
-  new: { label: '新词', tone: 'vermilion' as const },
-  learning: { label: '学习中', tone: 'gold' as const },
-  review: { label: '复习', tone: 'sage' as const },
-  relearning: { label: '重学', tone: 'vermilion' as const },
-} as const;
-
 const STATUS_TONE_CLASS: Record<'muted' | 'vermilion' | 'gold' | 'sage', string> = {
   muted: 'badge--outline',
   vermilion: 'badge--vermilion',
@@ -34,19 +29,35 @@ const STATUS_TONE_CLASS: Record<'muted' | 'vermilion' | 'gold' | 'sage', string>
   sage: 'badge--sage',
 };
 
+function statusMeta(
+  t: TranslateFn,
+  status: FlashcardSchedule['status'],
+): { label: string; tone: 'vermilion' | 'gold' | 'sage' } {
+  switch (status) {
+    case 'new':
+      return { label: t('study.flashcardNew'), tone: 'vermilion' };
+    case 'learning':
+      return { label: t('study.flashcardLearning'), tone: 'gold' };
+    case 'review':
+      return { label: t('study.flashcardReview'), tone: 'sage' };
+    case 'relearning':
+      return { label: t('study.flashcardRelearning'), tone: 'vermilion' };
+  }
+}
+
 function wordSizeClass(term: string): string {
   if (term.length > 14) return 'is-longer';
   if (term.length > 9) return 'is-long';
   return '';
 }
 
-function dueLabel(card: FlashcardSchedule, now = Date.now()): string {
-  if (card.status === 'new') return '首次学习';
+function dueLabel(t: TranslateFn, card: FlashcardSchedule, now = Date.now()): string {
+  if (card.status === 'new') return t('study.flashcardFirstLearn');
   const delta = card.dueAt - now;
-  if (delta <= 0) return '已到期';
+  if (delta <= 0) return t('study.flashcardOverdue');
   const days = Math.ceil(delta / 86_400_000);
-  if (days <= 1) return '今天';
-  return `${days} 天后`;
+  if (days <= 1) return t('study.flashcardDueToday');
+  return t('study.flashcardDaysLater', { days });
 }
 
 function masteryScore(card: FlashcardSchedule): number {
@@ -73,11 +84,15 @@ export default function Flashcard({
   onFlip,
   onSpeak,
 }: FlashcardProps) {
-  const status = isNew ? STATUS_META.new : STATUS_META[card.status];
-  const seal = isNew ? '新' : '复';
+  const t = useT();
+  const status = isNew ? statusMeta(t, 'new') : statusMeta(t, card.status);
+  const seal = isNew ? t('study.flashcardSealNew') : t('study.flashcardSealReview');
   const mastery = masteryScore(card);
-  const intervalText = card.interval > 0 ? `${card.interval} 天` : '尚未排期';
-  const dueText = dueLabel(card);
+  const intervalText =
+    card.interval > 0
+      ? t('study.flashcardIntervalDays', { days: card.interval })
+      : t('study.flashcardNotScheduled');
+  const dueText = dueLabel(t, card);
   const gate = variant === 'gate';
 
   return (
@@ -96,21 +111,23 @@ export default function Flashcard({
           <header className="study-card__top">
             <div className="study-card__metas">
               <span className={cx('badge', STATUS_TONE_CLASS[status.tone])}>{status.label}</span>
-              {isDue && !isNew ? <span className="badge badge--outline">到期</span> : null}
+              {isDue && !isNew ? (
+                <span className="badge badge--outline">{t('study.flashcardDueBadge')}</span>
+              ) : null}
             </div>
           </header>
 
           <div className="study-card__center">
             <h2 className={cx('study-card__word', wordSizeClass(word.term))}>{word.term}</h2>
             {gate ? (
-              <p className="study-card__gate-hint">先想一想它的意思，再决定认不认识。</p>
+              <p className="study-card__gate-hint">{t('study.gateThinkHint')}</p>
             ) : word.phonetic || word.partOfSpeech ? (
               <p className="study-card__pron">
                 {word.phonetic ? (
                   <span className="study-card__phonetic">{word.phonetic}</span>
                 ) : null}
                 {word.partOfSpeech ? (
-                  <span className="study-card__pos">{word.partOfSpeech}</span>
+                  <span className="study-card__back-pos">{word.partOfSpeech}</span>
                 ) : null}
               </p>
             ) : null}
@@ -125,7 +142,9 @@ export default function Flashcard({
                   </span>
                 ))
               ) : (
-                <span className="study-card__tag study-card__tag--quiet">未归类</span>
+                <span className="study-card__tag study-card__tag--quiet">
+                  {t('study.flashcardUncategorized')}
+                </span>
               )}
             </span>
 
@@ -137,10 +156,10 @@ export default function Flashcard({
                   event.stopPropagation();
                   onSpeak();
                 }}
-                aria-label={`朗读 ${word.term}`}
+                aria-label={t('study.speakAria', { term: word.term })}
               >
                 <IconVolume size={15} />
-                朗读
+                {t('study.speak')}
               </button>
               <button
                 type="button"
@@ -151,8 +170,8 @@ export default function Flashcard({
                   onFlip();
                 }}
               >
-                <span className="kbd">空格</span>
-                翻面看释义
+                <span className="kbd">{t('study.spaceKey')}</span>
+                {t('study.flipHint')}
               </button>
             </span>
           </footer>
@@ -164,7 +183,7 @@ export default function Flashcard({
           aria-hidden={!flipped}
         >
           <span className="seal study-card__seal" aria-hidden="true">
-            释
+            {t('study.flashcardSealMeaning')}
           </span>
 
           <header className="study-card__top study-card__top--back">
@@ -193,7 +212,7 @@ export default function Flashcard({
                 ) : null}
               </figure>
             ) : (
-              <p className="study-card__example-empty">这个词还没有例句，先记住它的释义。</p>
+              <p className="study-card__example-empty">{t('study.noExample')}</p>
             )}
           </div>
 
@@ -210,26 +229,31 @@ export default function Flashcard({
 
             <dl className="study-card__due">
               <div className="study-card__due-item">
-                <dt>状态</dt>
+                <dt>{t('study.flashcardStatus')}</dt>
                 <dd>{status.label}</dd>
               </div>
               <div className="study-card__due-item">
-                <dt>排期</dt>
+                <dt>{t('study.flashcardSchedule')}</dt>
                 <dd>{dueText}</dd>
               </div>
               <div className="study-card__due-item">
-                <dt>间隔</dt>
+                <dt>{t('study.flashcardInterval')}</dt>
                 <dd>{intervalText}</dd>
               </div>
               <div className="study-card__due-item">
-                <dt>掌握</dt>
+                <dt>{t('study.flashcardMastery')}</dt>
                 <dd>{mastery}%</dd>
               </div>
             </dl>
 
-            <button type="button" className="study-speak" onClick={onSpeak} aria-label={`朗读 ${word.term}`}>
+            <button
+              type="button"
+              className="study-speak"
+              onClick={onSpeak}
+              aria-label={t('study.speakAria', { term: word.term })}
+            >
               <IconVolume size={15} />
-              朗读
+              {t('study.speak')}
             </button>
           </footer>
         </article>
