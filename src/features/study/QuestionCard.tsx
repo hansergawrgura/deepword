@@ -18,9 +18,8 @@
  * 选项状态（选中 / 答对 / 答错）统一由 ./optionState 计算，组件只做样式映射；
  * 动效与声效通过同一个 emitOptionFeedback 出口挂载，不在此处散落判断。
  *
- * 布局：固定双栏，左栏题目卡、右栏反馈容器常驻（未作答时为同尺寸占位）。
- * 反馈只替换右栏内容，两栏宽高、间距、题目卡边界在所有题型与作答阶段
- * 都保持一致，不产生缩放 / 位移 / 跳动。窄屏降级为上下排列。
+ * 布局：左栏题目卡常驻；右栏解析仅在作答后展开，下一题自动收缩。
+ * 窄屏降级为上下排列。题干英文可点词解析；选中文本可出现解析图标。
  *
  * 组件不直接读写数据，判分与记录由 StudyView 驱动。
  */
@@ -30,6 +29,9 @@ import type { Question, Word } from '@/domain/types';
 import { SKILL_META, isTranslation } from '@/domain/practice';
 import { cx } from '@/domain/utils';
 import { IconVolume } from '@/ui/icons';
+import ClickableWords from './lookup/ClickableWords';
+import SelectionAssist from './lookup/SelectionAssist';
+import type { LookupAnchor, StudyLookupApi } from './lookup/useStudyLookup';
 import {
   emitOptionFeedback,
   optionStateClass,
@@ -56,6 +58,8 @@ export interface QuestionCardProps {
   onAskExplain?: () => void;
   /** 正在生成 AI 讲解。 */
   explaining?: boolean;
+  /** 点词 / 选句解析（由 StudyView 注入）。 */
+  lookup?: Pick<StudyLookupApi, 'lookup'>;
   onSubmit: (response: string) => void;
   onNext: () => void;
   /** 朗读英文；slow = true 时慢速。 */
@@ -80,6 +84,7 @@ export default function QuestionCard({
   autoAdvance,
   onAskExplain,
   explaining = false,
+  lookup,
   onSubmit,
   onNext,
   onSpeak,
@@ -88,12 +93,15 @@ export default function QuestionCard({
   const [readDone, setReadDone] = useState(false);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const paneRef = useRef<HTMLElement | null>(null);
+  const cardRef = useRef<HTMLElement | null>(null);
   const translation = isTranslation(question);
   const skillMeta = question.skill ? SKILL_META[question.skill] : undefined;
   const answered = phase === 'answered';
   /** 题目是否仍可继续作答：idle（未答）与 retry（答错后）都可。 */
   const editable = isAnswering(phase);
   const streaming = feedback?.streaming ?? false;
+  /** 作答后（含判分中）才展开右栏；下一题 phase 回到 idle 即收缩。 */
+  const feedbackOpen = phase !== 'idle';
 
   // 换题时清空输入与「看完了」标记
   useEffect(() => {
@@ -193,7 +201,9 @@ export default function QuestionCard({
       const target = event.target;
       if (
         target instanceof HTMLElement &&
-        target.closest('input, textarea, select, [contenteditable="true"]')
+        target.closest(
+          'input, textarea, select, [contenteditable="true"], .study-word-hot, .study-search, .study-lookup-pop',
+        )
       ) {
         return;
       }
@@ -213,6 +223,20 @@ export default function QuestionCard({
     onSubmit(value);
   }
 
+  const onWordClick = useCallback(
+    (token: string, anchor: LookupAnchor) => {
+      void lookup?.lookup('word', token, anchor);
+    },
+    [lookup],
+  );
+
+  const onSelectionExplain = useCallback(
+    (text: string, anchor: LookupAnchor) => {
+      void lookup?.lookup('sentence', text, anchor);
+    },
+    [lookup],
+  );
+
   // poor 必须等流式结束、并且用户点过「我看完了」。
   const canAdvance = !mustReadExplanation || (readDone && !streaming);
   const countdownSeconds = autoAdvance ? Math.max(0, Math.ceil(autoAdvance.remaining / 1000)) : 0;
@@ -222,9 +246,9 @@ export default function QuestionCard({
       : 0;
 
   return (
-    <div className="practice-layout">
+    <div className={cx('practice-layout', feedbackOpen && 'is-feedback-open')}>
       {/* ------------------------------ 左栏：题目 ------------------------------ */}
-      <section className="practice-card" aria-label="练习题">
+      <section ref={cardRef} className="practice-card" aria-label="练习题">
         <header className="practice-card__head">
           <span className="badge badge--outline">{skillMeta?.label ?? '练习'}</span>
           <span className="practice-card__counter">
@@ -232,7 +256,13 @@ export default function QuestionCard({
           </span>
         </header>
 
-        <p className="practice-card__prompt">{question.prompt}</p>
+        <p className="practice-card__prompt">
+          {lookup ? (
+            <ClickableWords text={question.prompt} onWordClick={onWordClick} />
+          ) : (
+            question.prompt
+          )}
+        </p>
 
         {question.audio ? (
           <div className="practice-card__audio">
@@ -276,6 +306,7 @@ export default function QuestionCard({
                     <span className="practice-option__key" aria-hidden="true">
                       {String.fromCharCode(65 + optionIndex)}
                     </span>
+                    {/* 选项本身是 button，不能再嵌套点词热点；选中文字用 SelectionAssist。 */}
                     <span className="practice-option__text">{option}</span>
                   </button>
                 </li>
@@ -369,18 +400,20 @@ export default function QuestionCard({
           </p>
         ) : null}
         </div>
+
+        {lookup ? <SelectionAssist rootRef={cardRef} onExplain={onSelectionExplain} /> : null}
       </section>
 
       {/* --------------------------- 右栏：反馈容器 ---------------------------
-          这一栏在所有题型、作答前后都常驻：未作答时是同尺寸占位纸面，
-          作答后只替换栏内内容，题目卡的宽度/高度/边界完全不变。 */}
+          始终挂载以便宽度动画；.is-feedback-open 控制展开，下一题收缩。 */}
       <aside
         ref={paneRef}
         className={cx('practice-feedback-pane', !feedback && 'is-idle')}
         role="status"
-        aria-live={feedback ? 'polite' : 'off'}
+        aria-live={feedbackOpen && feedback ? 'polite' : 'off'}
         aria-label="答题反馈"
-        aria-hidden={!feedback || undefined}
+        aria-hidden={!feedbackOpen || undefined}
+        inert={!feedbackOpen || undefined}
       >
         {feedback ? (
           <div
@@ -443,7 +476,6 @@ export default function QuestionCard({
               ) : null}
             </div>
 
-            {/* 操作区钉在容器底部，正文再长也不用滚动去找「下一题」 */}
             <div className="practice-feedback__footer">
               <div className="practice-feedback__actions">
                 {onAskExplain ? (
@@ -467,7 +499,6 @@ export default function QuestionCard({
                     我看完了
                   </button>
                 ) : null}
-                {/* 答错不锁题：主按钮让位给「跳过这题」，鼓励继续作答但不困住人 */}
                 {phase === 'retry' ? (
                   <button type="button" className="btn btn--ghost" onClick={onNext}>
                     跳过这题
@@ -500,7 +531,13 @@ export default function QuestionCard({
           </div>
         ) : (
           <div className="practice-feedback-panel practice-feedback-panel--idle">
-            <p className="practice-feedback__idle">作答后，这里显示讲解与「下一题」。</p>
+            <p className="practice-feedback__idle">
+              {feedbackOpen
+                ? phase === 'judging'
+                  ? '正在判分…'
+                  : '讲解生成中…'
+                : '作答后，这里显示讲解与「下一题」。'}
+            </p>
           </div>
         )}
       </aside>

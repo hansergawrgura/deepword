@@ -1,8 +1,11 @@
 import type { ViewProps } from '@/domain/types';
-import { percent, weekdayName } from '@/domain/utils';
+import { cx, percent, weekdayName } from '@/domain/utils';
 import { newQuestionCount, reviewQuestionCount } from '@/domain/practiceRound';
 import { IconBook, IconHome } from '@/ui/icons';
 import Flashcard, { DEFAULT_GATE_SCHEDULE } from './Flashcard';
+import LookupPopover from './lookup/LookupPopover';
+import StudySearch from './lookup/StudySearch';
+import { useStudyLookup } from './lookup/useStudyLookup';
 import QuestionCard from './QuestionCard';
 import RoundSummary from './RoundSummary';
 import { useStudyController } from './useStudyController';
@@ -10,36 +13,60 @@ import './StudyView.css';
 
 export default function StudyView({ navigate }: ViewProps) {
   const c = useStudyController();
+  const answering = Boolean(c.question) && (c.stage === 'new' || c.stage === 'review');
+  const currentWord = c.question
+    ? (c.wordMap.get(c.question.wordId) ?? c.data.words[0])
+    : undefined;
+  const studyLookup = useStudyLookup({
+    llmSettings: c.llmSettings,
+    aiAvailable: c.aiAvailable,
+    words: c.data.words,
+    question: c.question,
+    word: currentWord,
+  });
 
   return (
-    <div className="study">
-      {c.roundQuestions > 0 ? (
-        <div className="study-progress study-progress--top">
-          <div
-            className="progress"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={c.roundQuestions}
-            aria-valuenow={c.roundIndex}
-            aria-label="本轮进度"
-          >
+    <div className={cx('study', answering && 'study--answering')}>
+      <div className="study-chrome">
+        {answering ? (
+          <StudySearch
+            onSearch={(query) => {
+              void studyLookup.lookup('search', query, {
+                top: 64,
+                left: Math.round(window.innerWidth / 2),
+              });
+            }}
+          />
+        ) : null}
+
+        {c.roundQuestions > 0 ? (
+          <div className="study-progress study-progress--top">
             <div
-              className="progress__bar"
-              style={{ width: `${percent(c.session?.questionIndex ?? 0, c.roundQuestions)}%` }}
-            />
+              className="progress"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={c.roundQuestions}
+              aria-valuenow={c.roundIndex}
+              aria-label="本轮进度"
+            >
+              <div
+                className="progress__bar"
+                style={{ width: `${percent(c.session?.questionIndex ?? 0, c.roundQuestions)}%` }}
+              />
+            </div>
+            <div className="study-progress__meta">
+              <span>
+                第 {c.session?.roundNo ?? 1} 轮 · {c.planVisible ? '待继续' : c.stageLabel} · 第{' '}
+                {c.roundIndex} / {c.roundQuestions} 题
+              </span>
+              <span>
+                已答 {c.session?.answered ?? 0} 题
+                {c.summary ? ` · 正确率 ${c.summary.accuracy}%` : ''}
+              </span>
+            </div>
           </div>
-          <div className="study-progress__meta">
-            <span>
-              第 {c.session?.roundNo ?? 1} 轮 · {c.planVisible ? '待继续' : c.stageLabel} · 第{' '}
-              {c.roundIndex} / {c.roundQuestions} 题
-            </span>
-            <span>
-              已答 {c.session?.answered ?? 0} 题
-              {c.summary ? ` · 正确率 ${c.summary.accuracy}%` : ''}
-            </span>
-          </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       <div className="study-bar">
         <span className="study-bar__stage" title={c.studyHint}>
@@ -257,10 +284,10 @@ export default function StudyView({ navigate }: ViewProps) {
                 </div>
               )}
             </div>
-          ) : c.question ? (
+          ) : c.question && currentWord ? (
             <QuestionCard
               question={c.question}
-              word={c.wordMap.get(c.question.wordId) ?? c.data.words[0]}
+              word={currentWord}
               index={c.session?.questionIndex ?? 0}
               total={c.session?.questions?.length ?? 0}
               phase={c.phase}
@@ -272,6 +299,7 @@ export default function StudyView({ navigate }: ViewProps) {
                 c.needsExplain && c.aiAvailable && c.llmSettings ? c.handleAskExplain : undefined
               }
               explaining={c.explaining}
+              lookup={studyLookup}
               onSubmit={(response) => void c.handleSubmit(response)}
               onNext={c.handleNext}
               onSpeak={c.speak}
@@ -298,6 +326,10 @@ export default function StudyView({ navigate }: ViewProps) {
           )}
         </div>
       </div>
+
+      {studyLookup.active ? (
+        <LookupPopover active={studyLookup.active} onClose={studyLookup.clear} />
+      ) : null}
     </div>
   );
 }

@@ -13,18 +13,20 @@
      --study-pane-pad 同时也是每个阶段容器（纸面 / 题目卡 / 成绩单 /
      闪卡 / 闸门）四边统一的内边距。 */
   --study-pane-pad: 24px;
+  --study-chrome-gap: 10px;
   --study-progress-slot: 40px;
   --feedback-width: 320px;
   --feedback-gap: 20px;
+  --feedback-duration: var(--duration-slow);
 
-  /* 顶部进度条常驻占位，工具条与舞台的纵坐标就不随轮次状态变化 */
   position: relative;
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
-  padding: var(--study-progress-slot) 0 0;
+  /* 顶部 chrome（搜索 + 进度）占流内高度，不再用绝对定位硬顶 */
+  padding: 0;
 }
 
 [data-theme='dark'] .study {
@@ -1358,16 +1360,22 @@
 /* 轮次进度条置顶，下面只留一行工具条：tab / 阶段 / 动作。
    原先两层 view-head（大标题 + eyebrow + 副标题）已合并到这一行。 */
 
-/* 进度条覆盖在 .study 顶部的常驻占位上：出现 / 消失都不占额外流内高度，
-   工具条与中间舞台的纵坐标因此保持恒定。 */
+/* 顶部 chrome：搜索在最上，进度条紧随其后 */
+.study-chrome {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--study-chrome-gap);
+  min-height: 0;
+  margin: 0 0 4px;
+}
+
 .study-progress--top {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--study-progress-slot);
+  position: static;
+  height: auto;
+  min-height: 0;
   margin: 0;
-  padding: 0 0 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
@@ -1385,9 +1393,7 @@
   gap: 12px;
   flex-wrap: wrap;
   flex: 0 0 auto;
-  /* 工具条高度恒定，舞台的可用高度也就不随阶段/动作按钮变化 */
-  min-height: 44px;
-  /* 舞台自己的上内边距就是这段留白，不再叠加一层工具条外边距 */
+  min-height: 40px;
   margin-bottom: 0;
 }
 
@@ -1403,6 +1409,69 @@
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+/* 答题中顶部搜索：与题目卡同一纸面语汇 */
+.study-search {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 8px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--card-solid);
+  color: var(--ink-faint);
+  box-shadow: var(--shadow-sm);
+}
+
+.study-search:focus-within {
+  border-color: var(--vermilion-line);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm), 0 0 0 3px var(--vermilion-wash);
+}
+
+.study-search__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  outline: none;
+}
+
+.study-search__input::placeholder {
+  color: var(--ink-faint);
+}
+
+.study-search__go {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--vermilion-wash);
+  color: var(--vermilion-deep);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.study-search__go:hover:not(:disabled) {
+  border-color: var(--vermilion-line);
+  background: color-mix(in srgb, var(--vermilion-wash) 70%, var(--card-solid));
+}
+
+.study-search__go:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* ---------------------------- 轮次说明 ---------------------------- */
@@ -1488,8 +1557,9 @@
 /* ---------------------------- 题目卡 ---------------------------- */
 
 .practice-card {
-  /* 题目卡永远占满固定外框的左栏：宽、高、边界不随题型 / 作答阶段变化。
+  /* 题目卡永远占满左栏：宽、高、边界不随题型变化。
      头部与提示钉在上、操作区钉在下，中间作答区自适应并内部滚动。 */
+  position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -1513,6 +1583,8 @@
 .practice-card__body {
   flex: 1 1 0;
   min-height: 0;
+  /* 左右各 2px：选项描边用 inset shadow 也不被贴边裁切 */
+  padding: 2px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1588,12 +1660,14 @@
 }
 
 .practice-option {
+  --option-stroke: var(--line);
   width: 100%;
   display: flex;
   align-items: flex-start;
   gap: 12px;
   padding: 13px 16px;
-  border: 1px solid var(--line);
+  /* 透明 border 占位；可见描边用 inset shadow，避免 overflow 裁掉顶边 */
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: var(--card-solid);
   color: var(--ink);
@@ -1602,14 +1676,14 @@
   line-height: 1.6;
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-out),
+  box-shadow: inset 0 0 0 1px var(--option-stroke);
+  transition:
     background var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .practice-option:hover:not(:disabled) {
-  border-color: var(--vermilion-line);
-  transform: translateY(-1px);
+  --option-stroke: var(--vermilion-line);
 }
 
 .practice-option:disabled {
@@ -1634,12 +1708,12 @@
 }
 
 .practice-option.is-selected {
-  border-color: var(--vermilion);
+  --option-stroke: var(--vermilion);
   background: var(--vermilion-wash);
 }
 
 .practice-option.is-correct {
-  border-color: var(--sage);
+  --option-stroke: var(--sage);
   background: var(--sage-wash);
 }
 
@@ -1649,7 +1723,7 @@
 }
 
 .practice-option.is-wrong {
-  border-color: var(--vermilion);
+  --option-stroke: var(--vermilion);
   background: var(--vermilion-wash);
 }
 
@@ -1658,12 +1732,10 @@
   color: var(--vermilion-deep);
 }
 
-/* 选项状态由 data-option-state 统一输出（idle / selected / correct / wrong）。
-   上面三条类名是它的样式映射；要加动效直接按属性写选择器即可，
-   不需要在组件里判断「第几次作答」。 */
+/* 选项状态由 data-option-state 统一输出（idle / selected / correct / wrong）。 */
 
 .practice-option:active:not(:disabled) {
-  transform: translateY(0);
+  background: color-mix(in srgb, var(--card-solid) 70%, var(--vermilion-wash));
 }
 
 /* 输入 */
@@ -1673,21 +1745,27 @@
   gap: 8px;
 }
 
-/* ------------------------ 反馈：固定双栏 ------------------------ */
-/* 左栏题目卡 + 右栏反馈容器始终是两条固定列：作答前后、不同题型下，
-   列宽、间距、卡片宽高都完全相同，反馈只替换右栏里的内容。
-   没有列宽过渡、没有位移，也就没有缩放 / 偏移 / 跳动。 */
+/* ------------------------ 反馈：作答后展开右栏 ------------------------ */
+/* 右栏始终挂载；用 0fr ↔ minmax 做列宽动画，内容淡入。 */
 
 .practice-layout {
   width: 100%;
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--feedback-width);
+  grid-template-columns: minmax(0, 1fr) 0fr;
   grid-template-rows: minmax(0, 1fr);
-  gap: var(--feedback-gap);
+  column-gap: 0;
   align-items: stretch;
   overflow: hidden;
+  transition:
+    grid-template-columns var(--feedback-duration) var(--ease-out),
+    column-gap var(--feedback-duration) var(--ease-out);
+}
+
+.practice-layout.is-feedback-open {
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--feedback-width));
+  column-gap: var(--feedback-gap);
 }
 
 .practice-feedback-pane {
@@ -1697,6 +1775,19 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  opacity: 0;
+  transform: translateX(12px);
+  pointer-events: none;
+  transition:
+    opacity var(--duration-base) var(--ease-out),
+    transform var(--feedback-duration) var(--ease-out);
+}
+
+.practice-layout.is-feedback-open .practice-feedback-pane {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition-delay: 40ms;
 }
 
 .practice-feedback-panel {
@@ -1987,14 +2078,6 @@
     font-size: 17px;
   }
 
-  .practice-feedback__actions {
-    flex-direction: column-reverse;
-  }
-
-  .practice-feedback__actions .btn {
-    width: 100%;
-  }
-
   .study-report__skill {
     grid-template-columns: 64px minmax(0, 1fr) 48px;
     gap: 8px;
@@ -2062,14 +2145,34 @@
   }
 }
 
+/* 与 ui.css 的 view-stage--fixed 窄屏断点对齐：上下堆叠 + 自然高度 */
 @media (max-width: 900px) {
-  /* 并排空间不够：改为上下堆叠，题目卡仍占满整行（作答前后同宽） */
+  .study-chrome {
+    gap: 8px;
+    margin-bottom: 2px;
+  }
+
+  .study-search {
+    height: 38px;
+  }
+
   .practice-layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto;
-    gap: 14px;
+    grid-template-rows: auto 0fr;
+    row-gap: 0;
+    column-gap: 0;
     height: auto;
     overflow: visible;
+    transition:
+      grid-template-rows var(--feedback-duration) var(--ease-out),
+      row-gap var(--feedback-duration) var(--ease-out);
+  }
+
+  .practice-layout.is-feedback-open {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: 14px;
+    column-gap: 0;
   }
 
   .practice-card {
@@ -2078,34 +2181,48 @@
   }
 
   .practice-card__body {
+    flex: 0 0 auto;
     overflow: visible;
-  }
-
-  /* 窄屏堆叠时未作答不占位：反馈出现时两栏宽度依旧不变 */
-  .practice-feedback-pane.is-idle {
-    display: none;
   }
 
   .practice-feedback-pane {
     height: auto;
-    overflow: visible;
+    min-height: 0;
+    overflow: hidden;
+    transform: translateY(-8px);
   }
 
+  .practice-layout.is-feedback-open .practice-feedback-pane {
+    overflow: visible;
+    transform: none;
+  }
+
+  /* 关键：窄屏下 panel 若仍 flex:1 + min-height:0，正文会被压成 0 高，
+     内容溢出到卡片外，只剩底部「跳过/下一题」一条。 */
   .practice-feedback-panel {
+    flex: none;
     height: auto;
     max-height: none;
+    min-height: 0;
   }
 
   .practice-feedback {
-    overflow-y: visible;
+    flex: none;
+    min-height: 0;
+    overflow: visible;
+    padding: 14px 14px 12px;
   }
 
-  /* 窄屏交回自然高度：否则固定高度 + flex-basis:0 会把纸面折成一条。
-     注意这里位于文件末尾，能覆盖前面所有基础声明。 */
-  .study > .study-progress--top {
-    position: static;
-    height: auto;
-    padding-bottom: 12px;
+  .practice-feedback__footer {
+    padding: 12px 14px 14px;
+  }
+
+  .practice-feedback__actions {
+    flex-direction: column-reverse;
+  }
+
+  .practice-feedback__actions .btn {
+    width: 100%;
   }
 
   .study-sheet,
@@ -2115,20 +2232,9 @@
     overflow: visible;
   }
 
-  .study-sheet__body,
-  .practice-card__body {
+  .study-sheet__body {
     flex: 0 0 auto;
     overflow: visible;
-  }
-}
-
-@media (max-width: 760px) {
-  .practice-feedback {
-    padding: 14px 14px 12px;
-  }
-
-  .practice-feedback__footer {
-    padding: 12px 14px 14px;
   }
 
   .study-resume {
@@ -2137,6 +2243,15 @@
 }
 
 @media (max-width: 480px) {
+  .study-search {
+    height: 36px;
+    padding-inline: 12px 6px;
+  }
+
+  .study-search__input {
+    font-size: 13px;
+  }
+
   .practice-countdown {
     flex-wrap: wrap;
     gap: 8px;
@@ -2145,4 +2260,132 @@
   .practice-countdown__text {
     font-size: 11px;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .practice-layout,
+  .practice-feedback-pane,
+  .practice-layout.is-feedback-open .practice-feedback-pane {
+    transition: none;
+  }
+}
+
+/* ------------------------ 随点解析 / 选句 / 气泡 ------------------------ */
+
+.study-word-hot {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dashed color-mix(in srgb, var(--vermilion) 45%, transparent);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.study-word-hot:hover,
+.study-word-hot:focus-visible {
+  background: var(--vermilion-wash);
+  border-bottom-color: var(--vermilion);
+  outline: none;
+}
+
+.study-selection-assist {
+  position: fixed;
+  z-index: 40;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--card-solid);
+  color: var(--vermilion-deep);
+  box-shadow: var(--shadow-md);
+  transform: translate(-50%, -100%);
+  cursor: pointer;
+}
+
+.study-selection-assist:hover {
+  border-color: var(--vermilion);
+  background: var(--vermilion-wash);
+}
+
+.study-lookup-pop {
+  position: fixed;
+  z-index: 50;
+  width: min(320px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--card-solid);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.study-lookup-pop.is-error {
+  border-color: var(--vermilion-line);
+}
+
+.study-lookup-pop__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 10px 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.study-lookup-pop__meta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.study-lookup-pop__meta strong {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint);
+  font-weight: 500;
+}
+
+.study-lookup-pop__query {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.study-lookup-pop__body {
+  padding: 12px 14px 14px;
+  max-height: min(240px, 40vh);
+  overflow-y: auto;
+}
+
+.study-lookup-pop__pending,
+.study-lookup-pop__text {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.study-lookup-pop__pending {
+  color: var(--ink-faint);
+}
+
+.study-lookup-pop__foot {
+  display: flex;
+  gap: 10px;
+  padding: 0 14px 10px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  letter-spacing: 0.04em;
 }

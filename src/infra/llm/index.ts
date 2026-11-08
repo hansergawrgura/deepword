@@ -55,6 +55,16 @@ export {
   localTranslationGrade,
 } from './feedback';
 
+export {
+  buildQuestionLookupContext,
+  clearLookupCache,
+  getCachedLookup,
+  lookupCacheKey,
+  normalizeLookupText,
+  runLookup,
+  setCachedLookup,
+} from './lookup';
+export type { LookupKind, LookupRequest, LookupResult } from './lookup';
 
 export type {
   ChatCompleteExtOptions,
@@ -66,3 +76,4 @@ export type {
   StreamChatOptions,
 } from './types';
 export { LLMError } from './types';
+
