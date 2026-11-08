@@ -133,7 +133,7 @@ export function evaluateMastery(
     streak += 1;
   }
 
-  // 参与判定的区间 = 最近连续答对的至多 N 次（契约里的「这几次」）。
+  // 参与判定的区间 = 最近连续答对的至多 N 次。
   const window = attempts.slice(0, Math.min(streak, MASTERY_RULES.consecutiveCorrect));
 
   const windowSkills = new Set<Skill>();

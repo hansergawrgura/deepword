@@ -1,10 +1,6 @@
-/**
- * 学习页控制器：作答、AI 流式讲解、TTS、一轮状态与持久化。
- */
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/app/store';
-import { useT } from '@/i18n';
+import { useLocale, useT } from '@/i18n';
 import type {
   PracticeResult,
   PracticeSessionState,
@@ -57,6 +53,7 @@ interface PendingRecord {
 export function useStudyController() {
   const { data, actions } = useApp();
   const t = useT();
+  const locale = useLocale();
   const [phase, setPhase] = useState<AnswerPhase>('idle');
   const [feedback, setFeedback] = useState<AnswerFeedbackState | null>(null);
   const [masteredThisRound, setMasteredThisRound] = useState<string | null>(null);
@@ -354,6 +351,7 @@ export function useStudyController() {
           { word, question: item, response },
           llmSettings,
           {
+            locale,
             onToken: (chunk) =>
               setFeedback((prev) => ({
                 status: 'ok',
@@ -389,7 +387,7 @@ export function useStudyController() {
           commit({ correct: true });
           setFeedback({
             status: 'ok',
-            text: encouragement(current.answered),
+            text: encouragement(current.answered, locale),
             streaming: false,
           });
         } else {
@@ -397,12 +395,13 @@ export function useStudyController() {
           commit({ correct: false });
           setPhase('retry');
 
-          const local = localAnswerFeedback({ word, question: item, response });
+          const local = localAnswerFeedback({ word, question: item, response }, locale);
           if (data.practice.autoExplain && llmSettings && aiAvailable) {
             const streamed = await streamAnswerFeedback(
               { word, question: item, response },
               llmSettings,
               {
+                locale,
                 onToken: (chunk) => {
                   if (attemptSeq.current !== seq) return;
                   setFeedback((prev) => ({
@@ -489,6 +488,7 @@ export function useStudyController() {
       { word, question: item, response: lastResponse.current },
       llmSettings,
       {
+        locale,
         onToken: (chunk) =>
           setFeedback((prev) => ({
             status: 'ok',

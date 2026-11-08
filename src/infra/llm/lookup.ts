@@ -3,6 +3,7 @@
  */
 
 import type { LLMSettings, Question, Word } from '@/domain/types';
+import { createT, DEFAULT_LOCALE, type Locale, type TranslateFn } from '@/i18n';
 import { chatComplete } from './forward';
 import type { ChatMessage } from './types';
 
@@ -86,18 +87,25 @@ export function buildQuestionLookupContext(question: Question, word?: Word): str
   return lines.join('\n');
 }
 
-function localWordHit(text: string, words: Word[]): string | undefined {
+export function formatLocalWordLookup(word: Word, t: TranslateFn): string {
+  const phonetic = word.phonetic ? ` ${word.phonetic}` : '';
+  const parts = [t('study.lookupLocalLine', { term: word.term, phonetic, meaning: word.meaning })];
+  if (word.partOfSpeech) parts.push(t('study.lookupLocalPos', { pos: word.partOfSpeech }));
+  if (word.example) {
+    const translation = word.exampleTranslation
+      ? t('domain.practice.exampleTranslationWrap', { text: word.exampleTranslation })
+      : '';
+    parts.push(t('study.lookupLocalExample', { example: word.example, translation }));
+  }
+  return parts.join('\n');
+}
+
+function localWordHit(text: string, words: Word[], t: TranslateFn): string | undefined {
   const needle = normalizeLookupText(text).toLowerCase();
   if (!needle) return undefined;
   const hit = words.find((word) => word.term.trim().toLowerCase() === needle);
   if (!hit) return undefined;
-  const parts = [`${hit.term}${hit.phonetic ? ` ${hit.phonetic}` : ''}：${hit.meaning}`];
-  if (hit.partOfSpeech) parts.push(`词性：${hit.partOfSpeech}`);
-  if (hit.example) {
-    const translation = hit.exampleTranslation ? `（${hit.exampleTranslation}）` : '';
-    parts.push(`例句：${hit.example}${translation}`);
-  }
-  return parts.join('\n');
+  return formatLocalWordLookup(hit, t);
 }
 
 function buildMessages(request: LookupRequest): ChatMessage[] {
@@ -150,6 +158,7 @@ export interface RunLookupOptions {
   signal?: AbortSignal;
   /** 本地词库：单词查询优先命中。 */
   words?: Word[];
+  locale?: Locale;
 }
 
 /**
@@ -161,15 +170,16 @@ export async function runLookup(
   request: LookupRequest,
   options: RunLookupOptions = {},
 ): Promise<LookupResult> {
+  const t = createT(options.locale ?? DEFAULT_LOCALE);
   const text = normalizeLookupText(request.text);
   if (!text) {
-    return { text: '请先输入或选中内容。', cached: false };
+    return { text: t('study.lookupEmpty'), cached: false };
   }
 
   const context = request.context ?? '';
 
   if (request.kind === 'word' || request.kind === 'search') {
-    const local = localWordHit(text, options.words ?? []);
+    const local = localWordHit(text, options.words ?? [], t);
     if (local) {
       setCachedLookup(request.kind, text, local, context);
       return { text: local, cached: false, local: true };
@@ -193,7 +203,7 @@ export async function runLookup(
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  const finalText = cleaned || '暂时没有解析结果，请稍后再试。';
+  const finalText = cleaned || t('study.lookupNoResult');
   setCachedLookup(request.kind, text, finalText, context);
   return { text: finalText, cached: false };
 }

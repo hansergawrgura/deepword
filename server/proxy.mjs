@@ -511,7 +511,7 @@ async function routeApi(req, res, config) {
  * - POST /api/llm/forward
  * 其余 /api 返回 404 JSON。
  *
- * options.timeoutMs：测试注入用的统一短超时；生产不传，走契约默认 20s/90s。
+ * options.timeoutMs：测试注入用的统一短超时；生产不传，走默认 20s/90s。
  */
 export function createApiHandler(options = {}) {
   const timeoutMs = options.timeoutMs;
@@ -658,7 +658,7 @@ async function serveIndex(res, indexHtml) {
 
 /**
  * 启动 prod 服务：托管 dist/ + /api。
- * 端口默认 8787、host 默认 127.0.0.1（契约要求仅监听本机回环）。
+ * 端口默认 8787、host 默认 127.0.0.1（仅监听本机回环）。
  * dist 不存在时抛出 code='DIST_MISSING' 的中文错误，由 server/index.mjs 打印并以非 0 退出。
  */
 export async function startServer(options = {}) {

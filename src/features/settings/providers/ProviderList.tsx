@@ -74,7 +74,7 @@ export default function ProviderList({
               <div className="provider-card__title-row">
                 <strong className="provider-card__name">{name}</strong>
                 <span className="badge badge--outline">{protocolLabel(profile.protocol, t)}</span>
-                <span className="badge">{vendorLabel(profile.vendor)}</span>
+                <span className="badge">{vendorLabel(profile.vendor, locale)}</span>
                 {isActive && (
                   <span className="badge badge--vermilion badge--dot">{t('providers.badgeActive')}</span>
                 )}

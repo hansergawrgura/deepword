@@ -8,6 +8,7 @@ import {
   STORAGE_KEY,
 } from '@/app/identity';
 import { SEED_WORDS } from '@/data/wordbanks';
+import { MAX_REVIEW_WORDS, MIN_REVIEW_WORDS } from '@/domain/rounds';
 import { DEFAULT_PRACTICE_SETTINGS } from '@/domain/types';
 import {
   clearStoredData,
@@ -16,8 +17,9 @@ import {
   hydrateData,
   importBackup,
   loadData,
+  normalizePracticeSettings,
   saveData,
-} from './storage';
+} from '@/infra/storage/storage';
 
 const NOW = new Date('2026-11-07T12:00:00+08:00').getTime();
 
@@ -127,7 +129,7 @@ describe('saveData / loadData', () => {
     store.set(STORAGE_KEY, JSON.stringify({ version: 2, words: [{ id: 'w1', term: 'x', meaning: 'y' }] }));
 
     const result = loadData(NOW);
-    expect(result.warning).toMatch(/version mismatch/i);
+    expect(result.warning).toMatch(/version mismatch|版本不匹配/i);
     expect(result.data.version).toBe(3);
     expect(result.data.words.length).toBe(SEED_WORDS.length);
     expect(store.has('deepword:data:v2')).toBe(false);
@@ -144,6 +146,27 @@ describe('clearStoredData', () => {
     for (const key of LEGACY_STORAGE_KEYS) {
       expect(store.has(key)).toBe(false);
     }
+  });
+});
+
+describe('normalizePracticeSettings', () => {
+  it('clamps reviewWordsPerRound to domain 4–6 (not legacy 1–12)', () => {
+    expect(normalizePracticeSettings({ reviewWordsPerRound: 1 }).reviewWordsPerRound).toBe(
+      MIN_REVIEW_WORDS,
+    );
+    expect(normalizePracticeSettings({ reviewWordsPerRound: 12 }).reviewWordsPerRound).toBe(
+      MAX_REVIEW_WORDS,
+    );
+    expect(normalizePracticeSettings({ reviewWordsPerRound: 5 }).reviewWordsPerRound).toBe(5);
+  });
+
+  it('keeps reviewQuestionsPerRound inside [words, 2×words]', () => {
+    const settings = normalizePracticeSettings({
+      reviewWordsPerRound: 4,
+      reviewQuestionsPerRound: 20,
+    });
+    expect(settings.reviewWordsPerRound).toBe(4);
+    expect(settings.reviewQuestionsPerRound).toBe(8);
   });
 });
 
@@ -179,13 +202,13 @@ describe('importBackup', () => {
       version: 2,
       data: { version: 2, words: [{ id: 'w1', term: 'a', meaning: 'b', createdAt: NOW }] },
     });
-    expect(() => importBackup(v2)).toThrow(/v3/);
+    expect(() => importBackup(v2)).toThrow(/v3|版本 3/);
 
     const bareV2 = JSON.stringify({
       version: 2,
       words: [{ id: 'w1', term: 'a', meaning: 'b', createdAt: NOW }],
     });
-    expect(() => importBackup(bareV2)).toThrow(/v3/);
+    expect(() => importBackup(bareV2)).toThrow(/v3|版本 3/);
   });
 });
 
@@ -196,6 +219,6 @@ describe('hydrateData', () => {
         { version: 2, words: [{ id: 'w1', term: 'a', meaning: 'b', createdAt: NOW }] },
         { now: NOW },
       ),
-    ).toThrow(/version 3/i);
+    ).toThrow(/version 3|数据版本 3/i);
   });
 });

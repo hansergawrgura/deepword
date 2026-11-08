@@ -1,5 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { createT, DEFAULT_LOCALE } from '@/i18n';
+import { APP_ID } from '@/app/identity';
+import { createT } from '@/i18n';
+import { readPersistedLocale } from '@/i18n/persistedLocale';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -14,7 +16,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   state: ErrorBoundaryState = { hasError: false, message: '' };
 
   static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
-    const t = createT(DEFAULT_LOCALE);
+    const t = createT(readPersistedLocale());
     return {
       hasError: true,
       message: error instanceof Error ? error.message : t('common.unknownError'),
@@ -22,13 +24,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('[dpdp-word] render error', error, info.componentStack);
+    console.error(`[${APP_ID}] render error`, error, info.componentStack);
   }
 
   render() {
     if (!this.state.hasError) return this.props.children;
 
-    const t = createT(DEFAULT_LOCALE);
+    const t = createT(readPersistedLocale());
     return (
       <div className="app-crash">
         <div className="card app-crash__card">

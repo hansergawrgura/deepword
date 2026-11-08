@@ -1,7 +1,7 @@
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 
 export interface ApiProxyOptions {
-  /** 测试注入：统一缩短连接/总超时（生产不传，走契约默认 20s/90s）。 */
+  /** 测试注入：统一缩短连接/总超时（生产不传，走默认 20s/90s）。 */
   timeoutMs?: number;
   /** 上游连接（等待响应头）超时，默认 20000。 */
   connectTimeoutMs?: number;

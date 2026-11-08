@@ -3,11 +3,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { AppData, Attempt, MasteryRecord, PracticeSettings, Skill, Word } from './types';
-import { DEFAULT_PRACTICE_SETTINGS } from './types';
-import { emptyAppData } from './fixtures';
+import type { AppData, Attempt, MasteryRecord, PracticeSettings, Skill, Word } from '@/domain/types';
+import { DEFAULT_PRACTICE_SETTINGS } from '@/domain/types';
+import { emptyAppData } from '@/domain/fixtures';
 
-import { countAvailable, pickNewWord, pickReviewWords, planRound, scoreReviewWord } from './rounds';
+import { countAvailable, pickNewWord, pickReviewWords, planRound, scoreReviewWord } from '@/domain/rounds';
 
 const NOW = new Date('2026-11-07T12:00:00+08:00').getTime();
 const DAY = 86_400_000;

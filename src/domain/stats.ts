@@ -1,5 +1,3 @@
-/** 统计与错题分析（v3：无 SRS / 闪卡）。 */
-
 import type { Locale } from '@/i18n/types';
 import { DEFAULT_LOCALE } from '@/i18n/types';
 import { createT } from '@/i18n/t';

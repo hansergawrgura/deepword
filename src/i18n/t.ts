@@ -33,9 +33,12 @@ export function interpolate(template: string, params?: MessageParams): string {
   });
 }
 
+/** Missing keys fall back to English catalogs so incomplete locales still resolve. */
+const MESSAGE_FALLBACK_LOCALE: Locale = 'en';
+
 export function createT(locale: Locale = DEFAULT_LOCALE): TranslateFn {
   const primary = CATALOGS[locale] ?? CATALOGS[DEFAULT_LOCALE];
-  const fallback = CATALOGS[DEFAULT_LOCALE];
+  const fallback = CATALOGS[MESSAGE_FALLBACK_LOCALE];
   return (key, params) => {
     const raw = getPath(primary, key) ?? getPath(fallback, key) ?? key;
     return interpolate(raw, params);

@@ -8,7 +8,9 @@ import {
   parseTranslationVerdict,
   streamAnswerFeedback,
   streamTranslationGrade,
-} from './feedback';
+} from '@/infra/llm/feedback';
+
+const ZH = 'zh-CN' as const;
 
 /* ------------------------------------------------------------------ */
 /* 测试脚手架                                                          */
@@ -173,21 +175,24 @@ describe('parseFeedbackImprovement', () => {
 
 describe('localAnswerFeedback', () => {
   it('降级讲解含「错因 / 记忆点 / 改进」三段且状态为 local-fallback', () => {
-    const feedback = localAnswerFeedback({
-      word: WORD,
-      question: CHOICE,
-      response: '蜡烛',
-    });
+    const feedback = localAnswerFeedback(
+      {
+        word: WORD,
+        question: CHOICE,
+        response: '蜡烛',
+      },
+      ZH,
+    );
     expect(feedback.status).toBe('local-fallback');
-    expect(feedback.explanation).toContain('错因：');
-    expect(feedback.explanation).toContain('记忆点：');
-    expect(feedback.explanation).toContain('改进：');
+    expect(feedback.explanation).toContain('错因:');
+    expect(feedback.explanation).toContain('记忆点:');
+    expect(feedback.explanation).toContain('改进:');
     expect(feedback.improvement && feedback.improvement.length).toBeGreaterThan(0);
     expect(feedback.explanation).toContain('蜡烛');
   });
 
   it('留白时也给出可读讲解', () => {
-    const feedback = localAnswerFeedback({ word: WORD, question: CHOICE, response: '  ' });
+    const feedback = localAnswerFeedback({ word: WORD, question: CHOICE, response: '  ' }, ZH);
     expect(feedback.status).toBe('local-fallback');
     expect(feedback.explanation).toContain('留白');
   });
@@ -195,36 +200,45 @@ describe('localAnswerFeedback', () => {
 
 describe('localTranslationGrade', () => {
   it('与参考译文一致判 perfect', () => {
-    const grade = localTranslationGrade({
-      word: WORD,
-      question: TRANSLATE,
-      response: TRANSLATE.answer,
-    });
+    const grade = localTranslationGrade(
+      {
+        word: WORD,
+        question: TRANSLATE,
+        response: TRANSLATE.answer,
+      },
+      ZH,
+    );
     expect(grade.verdict).toBe('perfect');
     expect(grade.status).toBe('local-fallback');
     expect(grade.improvement && grade.improvement.length).toBeGreaterThan(0);
   });
 
   it('意思接近判 good', () => {
-    const grade = localTranslationGrade({
-      word: WORD,
-      question: TRANSLATE,
-      response: '他去年放弃了那个计划。',
-    });
+    const grade = localTranslationGrade(
+      {
+        word: WORD,
+        question: TRANSLATE,
+        response: '他去年放弃了那个计划。',
+      },
+      ZH,
+    );
     expect(grade.verdict).toBe('good');
   });
 
   it('意思差距大判 poor', () => {
-    const grade = localTranslationGrade({
-      word: WORD,
-      question: TRANSLATE,
-      response: '今天的天气非常好。',
-    });
+    const grade = localTranslationGrade(
+      {
+        word: WORD,
+        question: TRANSLATE,
+        response: '今天的天气非常好。',
+      },
+      ZH,
+    );
     expect(grade.verdict).toBe('poor');
   });
 
   it('留白判 poor', () => {
-    const grade = localTranslationGrade({ word: WORD, question: TRANSLATE, response: '' });
+    const grade = localTranslationGrade({ word: WORD, question: TRANSLATE, response: '' }, ZH);
     expect(grade.verdict).toBe('poor');
     expect(grade.explanation).toContain('留白');
   });
@@ -232,10 +246,10 @@ describe('localTranslationGrade', () => {
 
 describe('encouragement', () => {
   it('返回非空的中文鼓励语', () => {
-    const text = encouragement();
+    const text = encouragement(undefined, ZH);
     expect(typeof text).toBe('string');
     expect(text.trim().length).toBeGreaterThan(0);
-    expect(encouragement(7).trim().length).toBeGreaterThan(0);
+    expect(encouragement(7, ZH).trim().length).toBeGreaterThan(0);
   });
 });
 
@@ -248,7 +262,11 @@ describe('未配置模型时的降级', () => {
 
   it('streamAnswerFeedback 未配置时返回 local-fallback 且不抛错', async () => {
     await expect(
-      streamAnswerFeedback({ word: WORD, question: CHOICE, response: '蜡烛' }, unconfigured),
+      streamAnswerFeedback(
+        { word: WORD, question: CHOICE, response: '蜡烛' },
+        unconfigured,
+        { locale: ZH },
+      ),
     ).resolves.toMatchObject({ status: 'local-fallback' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -257,6 +275,7 @@ describe('未配置模型时的降级', () => {
     const grade = await streamTranslationGrade(
       { word: WORD, question: TRANSLATE, response: '他去年放弃了这个计划。' },
       unconfigured,
+      { locale: ZH },
     );
     expect(grade.status).toBe('local-fallback');
     expect(grade.verdict).toBe('perfect');
@@ -268,9 +287,10 @@ describe('未配置模型时的降级', () => {
     const feedback = await streamAnswerFeedback(
       { word: WORD, question: CHOICE, response: '蜡烛' },
       makeSettings(),
+      { locale: ZH },
     );
     expect(feedback.status).toBe('local-fallback');
-    expect(feedback.explanation).toContain('错因：');
+    expect(feedback.explanation).toContain('错因:');
   });
 });
 

@@ -1,4 +1,3 @@
-/** 手绘风格的线性图标，统一 1.6px 描边，避免引入图标依赖。 */
 import type { SVGProps } from 'react';
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'width' | 'height'> {

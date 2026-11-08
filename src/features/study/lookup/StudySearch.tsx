@@ -1,7 +1,3 @@
-/**
- * 答题过程中顶部搜索：随时查词 / 翻译。
- */
-
 import { useState } from 'react';
 import { useT } from '@/i18n';
 import { IconSearch } from '@/ui/icons';

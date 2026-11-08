@@ -6,7 +6,7 @@ import {
   normalizeLookupText,
   setCachedLookup,
   buildQuestionLookupContext,
-} from './lookup';
+} from '@/infra/llm/lookup';
 import type { Question, Word } from '@/domain/types';
 
 const WORD: Word = {

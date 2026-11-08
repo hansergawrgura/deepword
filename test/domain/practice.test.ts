@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PracticeSettings, Question, Word } from './types';
-import { DEFAULT_PRACTICE_SETTINGS } from './types';
+import type { PracticeSettings, Question, Word } from '@/domain/types';
+import { DEFAULT_PRACTICE_SETTINGS } from '@/domain/types';
 import {
   buildMixedQuestions,
   buildQuestions,
@@ -9,7 +9,7 @@ import {
   pickSkills,
   skillLabel,
   SKILLS,
-} from './practice';
+} from '@/domain/practice';
 
 const SETTINGS: PracticeSettings = DEFAULT_PRACTICE_SETTINGS;
 
@@ -75,7 +75,7 @@ describe('buildQuestions', () => {
     const questions = build({ count: 8, isNewWord: true });
     expect(questions.length).toBe(8);
     const skills = new Set(questions.map((question) => question.skill));
-    // 契约要求新词尽量覆盖多种题型；同一技能允许两个题干变体，但不能压成一种。
+    // 新词应尽量覆盖多种技能；同一技能可有题干变体。
     expect(skills.size).toBeGreaterThanOrEqual(4);
     expect(skills.has('en2zh')).toBe(true);
     expect(skills.has('spell')).toBe(true);
@@ -335,12 +335,13 @@ describe('isTranslation / skillLabel', () => {
     ).toBe(false);
   });
 
-  it('技能中文名：缺省或非法值返回「练习」', () => {
-    expect(skillLabel('en2zh')).toBe('EN→ZH');
-    expect(skillLabel('translate')).toBe('Translation');
-    expect(skillLabel(undefined)).toBe('Practice');
-    expect(skillLabel('nope' as never)).toBe('Practice');
+  it('技能名随 locale 变化；缺省或非法值回退到练习', () => {
+    expect(skillLabel('en2zh', 'en')).toBe('EN→ZH');
+    expect(skillLabel('translate', 'en')).toBe('Translation');
+    expect(skillLabel(undefined, 'en')).toBe('Practice');
+    expect(skillLabel('nope' as never, 'en')).toBe('Practice');
     expect(skillLabel('en2zh', 'zh-CN')).toBe('英译中');
+    expect(skillLabel(undefined, 'zh-CN')).toBe('练习');
   });
 
   it('SKILLS 顺序固定为 6 个技能', () => {

@@ -1,17 +1,6 @@
-/**
- * LLM 出题层单元测试（vitest，node 环境，全部 mock 全局 fetch）。
- *
- * Phase A 之后所有 LLM 传输都经同源代理 `POST /api/llm/forward`：
- * mock 的 fetch 只拦截代理路径，断言 `body.url` 才是上游地址、`headers` 是发给上游的头。
- *
- * 覆盖：URL 规范化、OpenAI / Anthropic 请求构造与响应解析、思考参数映射与 400 去参重试、
- * response_format 降级重试、错误码映射、SSE 两条协议流式解析、模型列表、连通性测试不抛错、
- * 提示词内容（v3 不含出题生成）。
- */
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LLMSettings } from '@/domain/types';
-import { LLMError } from './types';
+import { LLMError } from '@/infra/llm/types';
 import {
   ANTHROPIC_VERSION,
   buildAnthropicRequestBody,
@@ -34,8 +23,8 @@ import {
   splitAnthropicMessages,
   streamChat,
   testLLMConnection,
-} from './forward';
-import * as llmEntry from './index';
+} from '@/infra/llm/forward';
+import * as llmEntry from '@/infra/llm';
 
 /* ------------------------------------------------------------------ */
 /* 测试脚手架                                                          */
@@ -1530,11 +1519,7 @@ describe('testLLMConnection', () => {
   });
 });
 
-/* ------------------------------------------------------------------ */
-/* barrel 导出契约                                                     */
-/* ------------------------------------------------------------------ */
-
-describe('LLM 层 barrel 导出契约', () => {
+describe('LLM barrel exports', () => {
   it('保持传输层与 FEEDBACK_PROMPT_VERSION / LLMError 导出', () => {
     expect(typeof llmEntry.hasUsableLLMConfig).toBe('function');
     expect(typeof llmEntry.testLLMConnection).toBe('function');

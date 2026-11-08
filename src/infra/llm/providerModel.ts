@@ -1,9 +1,3 @@
-/**
- * Provider 配置层：保存的多份配置、当前生效配置、厂商推断、导入时的 Key 继承。
- *
- * 纯函数、无 IO；设置页与状态层都从这里取口径，避免各处复制粘贴规则。
- */
-
 import {
   DEFAULT_PRACTICE_SETTINGS,
   MAX_PROVIDERS,
@@ -21,22 +15,25 @@ import { createT, DEFAULT_LOCALE, type Locale } from '@/i18n';
 /* 厂商                                                                */
 /* ------------------------------------------------------------------ */
 
-export const VENDOR_OPTIONS: ReadonlyArray<{ value: Vendor; label: string }> = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'qwen', label: '通义千问 / DashScope' },
-  { value: 'ollama', label: 'Ollama 本地' },
-  { value: 'kimi', label: 'Kimi / Moonshot' },
-  { value: 'glm', label: '智谱 GLM' },
-  { value: 'siliconflow', label: '硅基流动' },
-  { value: 'volcengine', label: '火山方舟 / Ark' },
-  { value: 'minimax', label: 'MiniMax' },
-  { value: 'custom', label: '其他 / 自定义' },
+export const VENDOR_OPTIONS: ReadonlyArray<{ value: Vendor }> = [
+  { value: 'openai' },
+  { value: 'anthropic' },
+  { value: 'deepseek' },
+  { value: 'qwen' },
+  { value: 'ollama' },
+  { value: 'kimi' },
+  { value: 'glm' },
+  { value: 'siliconflow' },
+  { value: 'volcengine' },
+  { value: 'minimax' },
+  { value: 'custom' },
 ];
 
-export function vendorLabel(vendor: Vendor): string {
-  return VENDOR_OPTIONS.find((item) => item.value === vendor)?.label ?? '其他';
+export function vendorLabel(vendor: Vendor, locale: Locale = DEFAULT_LOCALE): string {
+  const t = createT(locale);
+  const key = `providers.vendors.${vendor}`;
+  const label = t(key);
+  return label === key ? t('providers.vendors.custom') : label;
 }
 
 /** 由 Base URL 推断厂商；推断不出来时按协议给默认值。 */
@@ -92,7 +89,7 @@ export function resolveActiveLLMSettings(data: AppData): LLMSettings | null {
 export function providerSummaryText(profile: ProviderProfile, locale: Locale = DEFAULT_LOCALE): string {
   const t = createT(locale);
   const model = profile.defaultModel.trim() || t('providers.modelNotFilled');
-  return `${vendorLabel(profile.vendor)} · ${model}`;
+  return `${vendorLabel(profile.vendor, locale)} · ${model}`;
 }
 
 /* ------------------------------------------------------------------ */

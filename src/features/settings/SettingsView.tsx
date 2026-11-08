@@ -1,10 +1,3 @@
-/**
- * 设置页：多 provider 管理 + 数据管理 + 外观 + 关于。
- *
- * Provider 的增删改 / 切换当前使用只通过 useApp().actions 写入；
- * 列表与编辑表单的展示逻辑拆到 features/settings/providers/ 下。
- */
-
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/app/store';
 import type {
@@ -16,7 +9,13 @@ import type {
   TtsSettings,
 } from '@/domain/types';
 import { DEFAULT_PRACTICE_SETTINGS, MAX_PROVIDERS } from '@/domain/types';
-import { exportBackup, getStorageUsage, importBackup } from '@/infra/storage/storage';
+import {
+  MAX_NEW_WORDS,
+  MAX_REVIEW_WORDS,
+  MIN_NEW_WORDS,
+  MIN_REVIEW_WORDS,
+} from '@/domain/rounds';
+import { NEW_QUESTION_MAX, NEW_QUESTION_MIN } from '@/domain/practiceRound';
 import {
   findActiveProvider,
   providerName,
@@ -40,12 +39,18 @@ import './Settings.css';
 type EditorState = { mode: 'create' } | { mode: 'edit'; id: string };
 type DialogKind = 'import' | 'clear-progress' | 'reset-all' | null;
 
-/** Per-word question count options (4–8). */
-const QUESTIONS_PER_WORD_OPTIONS = [4, 5, 6, 7, 8];
-/** Review words per round options (4–6). */
-const REVIEW_WORDS_OPTIONS = [4, 5, 6];
-/** New words per round options (1–10). */
-const NEW_WORDS_OPTIONS = Array.from({ length: 10 }, (_, index) => index + 1);
+const QUESTIONS_PER_WORD_OPTIONS = Array.from(
+  { length: NEW_QUESTION_MAX - NEW_QUESTION_MIN + 1 },
+  (_, index) => NEW_QUESTION_MIN + index,
+);
+const REVIEW_WORDS_OPTIONS = Array.from(
+  { length: MAX_REVIEW_WORDS - MIN_REVIEW_WORDS + 1 },
+  (_, index) => MIN_REVIEW_WORDS + index,
+);
+const NEW_WORDS_OPTIONS = Array.from(
+  { length: MAX_NEW_WORDS - MIN_NEW_WORDS + 1 },
+  (_, index) => MIN_NEW_WORDS + index,
+);
 /** Auto-advance delay in ms; 0 = manual. */
 const AUTO_ADVANCE_OPTIONS = [
   { value: 3_000, key: 'settings.autoAdvance3s' as const },
@@ -79,7 +84,7 @@ export default function SettingsView() {
   // {t('settings.ttsVoice')}列表：浏览器可能在首次加载后才拿到 voices，Hook 内部监听 voiceschanged。
   const voices = useEnglishVoices();
 
-  const usage = useMemo(() => getStorageUsage(), [data.updatedAt]);
+  const usage = useMemo(() => actions.getStorageUsage(), [actions, data.updatedAt]);
   const activeProfile = useMemo(() => findActiveProvider(data), [data]);
   const activeSettings = resolveActiveLLMSettings(data);
   const activeIndex = activeProfile
@@ -106,15 +111,18 @@ export default function SettingsView() {
       ? (data.providers.find((item) => item.id === editor.id) ?? null)
       : null;
 
-  /* ------------------------- 练习设置（Phase B） ------------------------- */
+  /* ------------------------- 练习设置 ------------------------- */
   // 兜底合并默认值，保证 tts 的三个字段始终齐全（旧数据可能缺字段）。
   const practice: PracticeSettings = {
     ...DEFAULT_PRACTICE_SETTINGS,
     ...data.practice,
     tts: { ...DEFAULT_PRACTICE_SETTINGS.tts, ...data.practice?.tts },
   };
-  // 复习词数固定在 4~6；复习题量必须落在 [复习词数, 2×复习词数]。
-  const reviewWords = clamp(Math.round(practice.reviewWordsPerRound), 4, 6);
+  const reviewWords = clamp(
+    Math.round(practice.reviewWordsPerRound),
+    MIN_REVIEW_WORDS,
+    MAX_REVIEW_WORDS,
+  );
   const reviewQuestions = clamp(
     Math.round(practice.reviewQuestionsPerRound),
     reviewWords,
@@ -129,13 +137,12 @@ export default function SettingsView() {
     actions.setPracticeSettings(patch);
   }
 
-  /** 发音设置必须整体回写（rate / voiceUri / autoPlay）。 */
   function updateTts(patch: Partial<TtsSettings>) {
     actions.setPracticeSettings({ tts: { ...practice.tts, ...patch } });
   }
 
   function handleReviewWordsChange(next: number) {
-    const words = clamp(Math.round(next), 4, 6);
+    const words = clamp(Math.round(next), MIN_REVIEW_WORDS, MAX_REVIEW_WORDS);
     actions.setPracticeSettings({
       reviewWordsPerRound: words,
       reviewQuestionsPerRound: clamp(
@@ -216,7 +223,7 @@ export default function SettingsView() {
   function handleExportBackup() {
     downloadJson(
       downloadBackupName(new Date().toISOString().slice(0, 10)),
-      exportBackup(data, { includeApiKey: includeKey }),
+      actions.exportBackupJson({ includeApiKey: includeKey }),
     );
     actions.toast(
       includeKey ? t('settings.toastExportedKey') : t('settings.toastExported'),
@@ -229,7 +236,7 @@ export default function SettingsView() {
     setImportError('');
     try {
       const text = await file.text();
-      const next = importBackup(text);
+      const next = actions.parseBackup(text);
       setPendingImport(next);
       setDialog('import');
     } catch (error) {
@@ -239,7 +246,7 @@ export default function SettingsView() {
 
   function confirmDialog() {
     if (dialog === 'import' && pendingImport) {
-      actions.importBackup(pendingImport);
+      actions.applyBackup(pendingImport);
       setPendingImport(null);
       setEditor(null);
     } else if (dialog === 'clear-progress') {
@@ -676,7 +683,7 @@ export default function SettingsView() {
             </header>
             <div className="settings-card__body">
               <div className="segmented" role="group" aria-label={t('settings.languageTitle')}>
-                {(['en', 'zh-CN'] as Locale[]).map((loc) => (
+                {(['zh-CN', 'en'] as Locale[]).map((loc) => (
                   <button
                     key={loc}
                     type="button"

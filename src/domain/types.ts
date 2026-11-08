@@ -247,7 +247,7 @@ export interface AppData {
   attempts: Attempt[];
   mistakes: Record<string, Mistake>;
   theme: ThemeMode;
-  /** UI locale; omitted in older payloads → default `en`. */
+  /** UI locale; omitted in older payloads → default `zh-CN`. */
   locale?: AppLocale;
   stats: LearningStats;
   createdAt: number;

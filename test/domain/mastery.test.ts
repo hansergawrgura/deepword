@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { AppData, Attempt, MasteryRecord, Skill } from './types';
-import { emptyAppData } from './fixtures';
-import { evaluateMastery, isMastered, LEGACY_ROUND_ID, MASTERY_RULES } from './mastery';
+import type { AppData, Attempt, MasteryRecord, Skill } from '@/domain/types';
+import { emptyAppData } from '@/domain/fixtures';
+import { evaluateMastery, isMastered, LEGACY_ROUND_ID, MASTERY_RULES } from '@/domain/mastery';
 
 const NOW = new Date('2026-11-07T12:00:00+08:00').getTime();
 const DAY = 86_400_000;
@@ -44,7 +44,7 @@ function passingAttempts(): Attempt[] {
 
 describe('evaluateMastery：四条规则', () => {
   it('规则 1~4 全部满足时判定为已掌握', () => {
-    const check = evaluateMastery(makeData(passingAttempts()), 'w1', NOW);
+    const check = evaluateMastery(makeData(passingAttempts()), 'w1', NOW, 'en');
     expect(check.eligible).toBe(true);
     expect(check.reasons).toEqual([]);
     expect(check.streak).toBe(3);
@@ -58,7 +58,7 @@ describe('evaluateMastery：四条规则', () => {
       makeAttempt({ correct: true, createdAt: NOW - 20 * DAY, skill: 'en2zh', roundId: 'r1' }),
       makeAttempt({ correct: true, createdAt: NOW - 10 * DAY, skill: 'zh2en', roundId: 'r2' }),
     ];
-    const check = evaluateMastery(makeData(attempts), 'w1', NOW);
+    const check = evaluateMastery(makeData(attempts), 'w1', NOW, 'en');
     expect(check.eligible).toBe(false);
     expect(check.streak).toBe(2);
     expect(check.reasons.join('')).toContain('correct in a row');
@@ -70,7 +70,7 @@ describe('evaluateMastery：四条规则', () => {
       makeAttempt({ correct: true, createdAt: NOW - 2 * DAY, skill: 'zh2en', roundId: 'r1' }),
       makeAttempt({ correct: true, createdAt: NOW - 3 * DAY, skill: 'spell', roundId: 'r1' }),
     ];
-    const check = evaluateMastery(makeData(attempts), 'w1', NOW);
+    const check = evaluateMastery(makeData(attempts), 'w1', NOW, 'en');
     expect(check.streak).toBe(0);
     expect(check.eligible).toBe(false);
   });
@@ -81,7 +81,7 @@ describe('evaluateMastery：四条规则', () => {
       makeAttempt({ correct: true, createdAt: NOW - 10 * DAY, skill: 'en2zh', roundId: 'r2' }),
       makeAttempt({ correct: true, createdAt: NOW - 1 * DAY, skill: 'en2zh', roundId: 'r2' }),
     ];
-    const check = evaluateMastery(makeData(attempts), 'w1', NOW);
+    const check = evaluateMastery(makeData(attempts), 'w1', NOW, 'en');
     expect(check.eligible).toBe(false);
     expect(check.skills).toEqual(['en2zh']);
     expect(check.reasons.join('')).toContain('skill');
@@ -94,7 +94,7 @@ describe('evaluateMastery：四条规则', () => {
       makeAttempt({ correct: true, createdAt: NOW - 4 * DAY, skill: 'zh2en', roundId: 'r2' }),
       makeAttempt({ correct: true, createdAt: NOW - 1 * DAY, skill: 'spell', roundId: 'r2' }),
     ];
-    const check = evaluateMastery(makeData(attempts), 'w1', NOW);
+    const check = evaluateMastery(makeData(attempts), 'w1', NOW, 'en');
     expect(check.streak).toBe(3);
     expect(check.errorFreeDays).toBe(8);
     expect(check.eligible).toBe(false);
@@ -107,7 +107,7 @@ describe('evaluateMastery：四条规则', () => {
       makeAttempt({ correct: true, createdAt: NOW - 4 * DAY, skill: 'zh2en', roundId: 'r2' }),
       makeAttempt({ correct: true, createdAt: NOW - 3 * DAY, skill: 'spell', roundId: 'r2' }),
     ];
-    const check = evaluateMastery(makeData(attempts), 'w1', NOW);
+    const check = evaluateMastery(makeData(attempts), 'w1', NOW, 'en');
     expect(check.errorFreeDays).toBe(5);
     expect(check.eligible).toBe(false);
     expect(check.reasons.join('')).toMatch(/14/);
@@ -119,7 +119,7 @@ describe('evaluateMastery：四条规则', () => {
       makeAttempt({ correct: true, createdAt: NOW - 10 * DAY, skill: 'zh2en', roundId: 'r1' }),
       makeAttempt({ correct: true, createdAt: NOW - 1 * DAY, skill: 'spell', roundId: 'r1' }),
     ];
-    const check = evaluateMastery(makeData(attempts), 'w1', NOW);
+    const check = evaluateMastery(makeData(attempts), 'w1', NOW, 'en');
     expect(check.roundIds).toEqual(['r1']);
     expect(check.eligible).toBe(false);
     expect(check.reasons.join('')).toContain('round');
@@ -131,7 +131,7 @@ describe('evaluateMastery：四条规则', () => {
       makeAttempt({ correct: true, createdAt: NOW - 10 * DAY, skill: 'zh2en' }),
       makeAttempt({ correct: true, createdAt: NOW - 1 * DAY, skill: 'spell' }),
     ];
-    const check = evaluateMastery(makeData(attempts), 'w1', NOW);
+    const check = evaluateMastery(makeData(attempts), 'w1', NOW, 'en');
     expect(check.roundIds).toEqual([LEGACY_ROUND_ID]);
     expect(check.eligible).toBe(false);
     expect(check.reasons.join('')).toContain('round');
@@ -143,7 +143,7 @@ describe('evaluateMastery：四条规则', () => {
       makeAttempt({ correct: true, createdAt: NOW - 10 * DAY, skill: 'zh2en', roundId: 'r2' }),
       makeAttempt({ correct: true, createdAt: NOW - 1 * DAY, skill: 'spell', roundId: 'r2' }),
     ];
-    const check = evaluateMastery(makeData(attempts), 'w1', NOW);
+    const check = evaluateMastery(makeData(attempts), 'w1', NOW, 'en');
     expect(check.roundIds).toContain(LEGACY_ROUND_ID);
     expect(check.roundIds).toContain('r2');
     expect(check.eligible).toBe(true);
@@ -156,13 +156,13 @@ describe('evaluateMastery：四条规则', () => {
     const rule = makeData([], {
       mastery: { w1: { wordId: 'w1', masteredAt: NOW, source: 'rule' } as MasteryRecord },
     });
-    expect(evaluateMastery(manual, 'w1', NOW).eligible).toBe(true);
-    expect(evaluateMastery(manual, 'w1', NOW).reasons).toEqual([]);
-    expect(evaluateMastery(rule, 'w1', NOW).eligible).toBe(true);
+    expect(evaluateMastery(manual, 'w1', NOW, 'en').eligible).toBe(true);
+    expect(evaluateMastery(manual, 'w1', NOW, 'en').reasons).toEqual([]);
+    expect(evaluateMastery(rule, 'w1', NOW, 'en').eligible).toBe(true);
   });
 
   it('没有作答且没有掌握标记时不满足，并给出原因', () => {
-    const check = evaluateMastery(makeData([]), 'w1', NOW);
+    const check = evaluateMastery(makeData([]), 'w1', NOW, 'en');
     expect(check.eligible).toBe(false);
     expect(check.streak).toBe(0);
     expect(check.reasons.join('')).toContain('practice attempts');
@@ -173,20 +173,20 @@ describe('evaluateMastery：四条规则', () => {
       makeAttempt({ correct: true, createdAt: NOW - 1 * DAY, skill: undefined }),
       makeAttempt({ correct: true, createdAt: NOW - 2 * DAY, skill: undefined }),
     ];
-    const check = evaluateMastery(makeData(attempts), 'w1', NOW);
+    const check = evaluateMastery(makeData(attempts), 'w1', NOW, 'en');
     expect(check.streak).toBe(0);
     expect(check.eligible).toBe(false);
   });
 
   it('脏数据（空数据 / 空作答表 / 空 wordId）不抛错', () => {
-    expect(() => evaluateMastery(makeData([]), '', NOW)).not.toThrow();
-    expect(evaluateMastery(makeData([]), '', NOW).eligible).toBe(false);
+    expect(() => evaluateMastery(makeData([]), '', NOW, 'en')).not.toThrow();
+    expect(evaluateMastery(makeData([]), '', NOW, 'en').eligible).toBe(false);
     expect(
-      evaluateMastery(makeData(undefined as unknown as Attempt[]), 'w1', NOW).eligible,
+      evaluateMastery(makeData(undefined as unknown as Attempt[]), 'w1', NOW, 'en').eligible,
     ).toBe(false);
   });
 
-  it('规则阈值与契约一致', () => {
+  it('规则阈值与常量一致', () => {
     expect(MASTERY_RULES).toEqual({
       consecutiveCorrect: 3,
       minSkills: 2,

@@ -44,7 +44,7 @@ function skillLabel(t: TranslateFn, skill: Skill): string {
   return t(`domain.skill.${skill}.label`);
 }
 
-function weaknessFocusText(t: TranslateFn, report: WeaknessReport, locale: string): string {
+function weaknessFocusText(t: TranslateFn, report: WeaknessReport): string {
   if (!report.practiced || !report.weakestSkill) {
     return t('domain.weakness.noSkillAttempts');
   }
@@ -70,7 +70,7 @@ function weaknessFocusText(t: TranslateFn, report: WeaknessReport, locale: strin
     (second?.accuracy ?? 0) < 100 &&
     weakestAcc - (second?.accuracy ?? 0) <= 20;
 
-  const pairJoin = locale === 'zh-CN' ? '与' : ' & ';
+  const pairJoin = t('dashboard.focusPairJoin');
   const names = withSecond
     ? `${skillLabel(t, weakest.skill)}${pairJoin}${skillLabel(t, second!.skill)}`
     : skillLabel(t, weakest.skill);
@@ -91,7 +91,7 @@ function weaknessFocusText(t: TranslateFn, report: WeaknessReport, locale: strin
       t('dashboard.focusJoiner') +
       t('dashboard.focusWeakestWord', { term, count: worstWord.wrongCount });
   }
-  return locale === 'zh-CN' ? `${text}。` : `${text}.`;
+  return `${text}${t('dashboard.focusEndPunct')}`;
 }
 
 /** 正确率分档：用于细横条配色（弱 → 中 → 强）。 */
@@ -126,7 +126,7 @@ export default function Dashboard({ navigate }: ViewProps) {
       ? `${now.getMonth() + 1}${t('dashboard.monthSuffix')}`
       : now.toLocaleDateString(locale, { month: 'long' });
   const hasLearned = overview.learnedWords > 0;
-  const focusText = weaknessFocusText(t, weakness, locale);
+  const focusText = weaknessFocusText(t, weakness);
 
   return (
     <div className="dash">

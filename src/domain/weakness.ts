@@ -326,7 +326,7 @@ function buildFocus(
     (second?.accuracy ?? 0) < 100 &&
     weakestAcc - (second?.accuracy ?? 0) <= 20;
 
-  const pairJoin = locale === 'zh-CN' ? '与' : ' & ';
+  const pairJoin = t('dashboard.focusPairJoin');
   const names = withSecond
     ? `${skillDisplayLabel(weakest.skill, locale)}${pairJoin}${skillDisplayLabel(second!.skill, locale)}`
     : skillDisplayLabel(weakest.skill, locale);
@@ -349,5 +349,5 @@ function buildFocus(
       t('dashboard.focusWeakestWord', { term, count: worstWord.wrongCount });
   }
 
-  return locale === 'zh-CN' ? `${text}。` : `${text}.`;
+  return `${text}${t('dashboard.focusEndPunct')}`;
 }

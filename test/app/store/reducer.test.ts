@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Skill, Word } from '@/domain/types';
 import { emptyAppData } from '@/domain/fixtures';
-import { appReducer } from './reducer';
+import { appReducer } from '@/app/store/reducer';
 
 const NOW = new Date('2026-11-07T12:00:00+08:00').getTime();
 const DAY = 86_400_000;

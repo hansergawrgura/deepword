@@ -1,7 +1,3 @@
-/**
- * LLM 基础设施对外入口（v3 infra）：传输 + Provider 派生 + 讲解判分提示词版本。
- */
-
 export {
   ANTHROPIC_VERSION,
   DEFAULT_TIMEOUT_MS,
@@ -56,6 +52,7 @@ export {
 export {
   buildQuestionLookupContext,
   clearLookupCache,
+  formatLocalWordLookup,
   getCachedLookup,
   lookupCacheKey,
   normalizeLookupText,

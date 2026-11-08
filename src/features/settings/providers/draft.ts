@@ -1,5 +1,3 @@
-/** Provider 设置用的本地草稿工具：profile ⇄ draft ⇄ LLMSettings。 */
-
 import type { TranslateFn } from '@/i18n';
 import { toLLMSettings } from '@/infra/llm/providerModel';
 import type {
@@ -10,25 +8,10 @@ import type {
   ThinkingMode,
 } from '@/domain/types';
 
-export const PROTOCOL_OPTIONS: ReadonlyArray<{
-  value: ProviderKind;
-  label: string;
-  hint: string;
-}> = [
-  {
-    value: 'openai',
-    label: 'OpenAI 兼容',
-    hint: '适用于 OpenAI、DeepSeek、通义千问、Kimi、智谱、硅基流动、Ollama 等兼容接口。',
-  },
-  {
-    value: 'anthropic',
-    label: 'Anthropic',
-    hint: 'Anthropic Messages API；Base URL 填厂商给的前缀即可（官方 https://api.anthropic.com/v1、火山方舟 https://ark.cn-beijing.volces.com/api/coding），程序会自动补齐 /v1/messages。',
-  },
-];
+export const PROTOCOL_KINDS: readonly ProviderKind[] = ['openai', 'anthropic'];
 
 export function protocolLabel(protocol: ProviderKind, t: TranslateFn): string {
-  return protocol === 'anthropic' ? 'Anthropic' : t('providers.openaiCompat');
+  return protocol === 'anthropic' ? t('providers.anthropicLabel') : t('providers.openaiCompat');
 }
 
 export function thinkingModeLabel(mode: ThinkingMode, t: TranslateFn): string {

@@ -1,9 +1,5 @@
-/**
- * 模型列表弹窗行合并逻辑单测（Phase A P2 回归）。
- */
-
 import { describe, expect, it } from 'vitest';
-import { buildModelRows } from './modelRows';
+import { buildModelRows } from '@/features/settings/providers/modelRows';
 import type { ModelInfo } from '@/infra/llm';
 
 const model = (id: string, lifecycle?: string): ModelInfo => ({ id, lifecycle });

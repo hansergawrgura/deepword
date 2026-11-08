@@ -1,7 +1,3 @@
-/**
- * 拉取模型列表弹窗。
- */
-
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LLMSettings } from '@/domain/types';
 import type { ModelInfo } from '@/infra/llm';

@@ -25,7 +25,14 @@ import type {
 import { MAX_PROVIDERS } from '@/domain/types';
 import { uid } from '@/domain/utils';
 import { createT, I18nProvider, normalizeLocale } from '@/i18n';
-import { loadData, normalizeWord, saveData } from '@/infra/storage/storage';
+import {
+  exportBackup as serializeBackup,
+  getStorageUsage as readStorageUsage,
+  importBackup as parseBackupText,
+  loadData,
+  normalizeWord,
+  saveData,
+} from '@/infra/storage/storage';
 import { appReducer } from './reducer';
 import type { AppActions, AppContextValue } from './types';
 
@@ -213,6 +220,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return { added: accepted.length, skipped };
   }, []);
 
+  const parseWordsJson = useCallback((raw: string) => {
+    const tr = tRef.current;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      const list = Array.isArray(parsed)
+        ? parsed
+        : parsed && typeof parsed === 'object' && Array.isArray((parsed as { words?: unknown }).words)
+          ? ((parsed as { words: unknown[] }).words ?? [])
+          : null;
+      if (!list) return { ok: false as const, error: tr('wordbook.errorNeedArray') };
+      const inputs: WordInput[] = [];
+      for (const item of list) {
+        if (!item || typeof item !== 'object') continue;
+        const normalized = normalizeWord(item as WordInput);
+        if (normalized) inputs.push(normalized);
+      }
+      return { ok: true as const, inputs, total: list.length };
+    } catch (err) {
+      return {
+        ok: false as const,
+        error: err instanceof Error ? err.message : tr('wordbook.errorJson'),
+      };
+    }
+  }, []);
+
   const addProvider = useCallback(
     (draft: ProviderDraft) => {
       const tr = tRef.current;
@@ -257,13 +289,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_LOCALE', locale: next });
   }, []);
 
-  const importBackup = useCallback(
+  const exportBackupJson = useCallback((options?: { includeApiKey?: boolean }) => {
+    return serializeBackup(dataRef.current, options);
+  }, []);
+
+  const parseBackup = useCallback((raw: string) => parseBackupText(raw), []);
+
+  const applyBackup = useCallback(
     (next: AppData) => {
       dispatch({ type: 'IMPORT_DATA', data: next, now: Date.now() });
       toast(tRef.current('actions.backupImported'), 'success');
     },
     [toast],
   );
+
+  const getStorageUsage = useCallback(() => readStorageUsage(normalizeLocale(dataRef.current.locale)), []);
 
   const resetAll = useCallback(() => {
     dispatch({ type: 'RESET_ALL', now: Date.now() });
@@ -301,13 +341,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateWord,
       deleteWord,
       importWords,
+      parseWordsJson,
       addProvider,
       updateProvider,
       deleteProvider,
       setActiveProvider,
       setTheme,
       setLocale,
-      importBackup,
+      exportBackupJson,
+      parseBackup,
+      applyBackup,
+      getStorageUsage,
       resetAll,
       clearProgress,
       setPracticeSession,
@@ -322,13 +366,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateWord,
       deleteWord,
       importWords,
+      parseWordsJson,
       addProvider,
       updateProvider,
       deleteProvider,
       setActiveProvider,
       setTheme,
       setLocale,
-      importBackup,
+      exportBackupJson,
+      parseBackup,
+      applyBackup,
+      getStorageUsage,
       resetAll,
       clearProgress,
       setPracticeSession,

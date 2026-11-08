@@ -63,13 +63,19 @@ export interface AppActions {
   updateWord: (id: string, input: Partial<WordInput>) => { ok: boolean; message: string };
   deleteWord: (id: string) => void;
   importWords: (inputs: WordInput[]) => { added: number; skipped: number };
+  parseWordsJson: (
+    raw: string,
+  ) => { ok: true; inputs: WordInput[]; total: number } | { ok: false; error: string };
   addProvider: (draft: ProviderDraft) => { ok: boolean; message: string; id?: string };
   updateProvider: (id: string, draft: ProviderDraft) => void;
   deleteProvider: (id: string) => void;
   setActiveProvider: (id: string | null) => void;
   setTheme: (theme: ThemeMode) => void;
   setLocale: (locale: AppLocale) => void;
-  importBackup: (data: AppData) => void;
+  exportBackupJson: (options?: { includeApiKey?: boolean }) => string;
+  parseBackup: (raw: string) => AppData;
+  applyBackup: (data: AppData) => void;
+  getStorageUsage: () => { bytes: number; human: string };
   resetAll: () => void;
   clearProgress: () => void;
   setPracticeSession: (session: PracticeSessionState | null) => void;

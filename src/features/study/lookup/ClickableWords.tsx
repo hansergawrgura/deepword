@@ -1,9 +1,6 @@
-/**
- * 把英文单词做成可点击热点；中文 / 标点保持原样。
- * 点击时 stopPropagation，避免触发外层选项提交。
- */
-
+// stopPropagation on word clicks so option submit does not fire.
 import { useMemo } from 'react';
+import { useT } from '@/i18n';
 import type { LookupAnchor } from './useStudyLookup';
 
 const TOKEN_RE = /([A-Za-z][A-Za-z'-]*|[0-9]+(?:\.[0-9]+)?|[^A-Za-z0-9]+)/g;
@@ -19,6 +16,7 @@ function isWordToken(token: string): boolean {
 }
 
 export default function ClickableWords({ text, className, onWordClick }: ClickableWordsProps) {
+  const t = useT();
   const tokens = useMemo(() => text.match(TOKEN_RE) ?? [text], [text]);
 
   return (
@@ -32,7 +30,7 @@ export default function ClickableWords({ text, className, onWordClick }: Clickab
             key={`${index}-${token}`}
             type="button"
             className="study-word-hot"
-            title={`解析「${token}」`}
+            title={t('study.wordLookup', { token })}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();

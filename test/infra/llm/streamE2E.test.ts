@@ -1,18 +1,10 @@
-/**
- * 流式链路端到端测试：客户端 → 本地同源代理 → mock 上游（Anthropic SSE）。
- *
- * 覆盖 llm.test.ts（fetch 被 mock）覆盖不到的一环：**真实 HTTP 链路**上
- * 客户端是否真的在上游请求体里带 `stream:true`，以及代理是否把 SSE 逐块透传、
- * 客户端是否真的逐段回调 onToken。
- * 回归背景：曾经只把 stream 作为「代理响应提示」，上游请求体里没有 stream:true，
- * 于是上游返回整包 JSON，onToken 只回调一次，流式退化为一次性返回。
- */
+/** E2E: proxy path must send stream:true upstream and deliver incremental SSE to onToken. */
 
 import http from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startServer, type StartedServer } from '../../../server/proxy.mjs';
 import type { LLMSettings } from '@/domain/types';
-import { LLM_FORWARD_PATH, streamChat } from './forward';
+import { LLM_FORWARD_PATH, streamChat } from '@/infra/llm/forward';
 
 let upstream: http.Server;
 let upstreamPort = 0;

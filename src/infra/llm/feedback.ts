@@ -5,6 +5,7 @@
 import type { LLMSettings, Question, Skill, TranslationVerdict, Word } from '@/domain/types';
 import { isTranslation } from '@/domain/practice';
 import { normalizeAnswer } from '@/domain/utils';
+import { createT, DEFAULT_LOCALE, type Locale, type TranslateFn } from '@/i18n';
 import { buildAnswerFeedbackMessages, buildTranslationMessages } from './feedbackPrompts';
 import { streamChat } from './forward';
 
@@ -39,6 +40,7 @@ export interface AnswerFeedbackStreamOptions {
   signal?: AbortSignal;
   onToken?: (chunk: string) => void;
   timeoutMs?: number;
+  locale?: Locale;
 }
 
 export interface TranslationGradeStreamOptions {
@@ -46,14 +48,30 @@ export interface TranslationGradeStreamOptions {
   onToken?: (chunk: string) => void;
   onVerdict?: (verdict: TranslationVerdict) => void;
   timeoutMs?: number;
+  locale?: Locale;
 }
 
 export const FEEDBACK_TIMEOUT_MS = 30_000;
 export const EXPLANATION_MAX = 400;
 
-const IMPROVEMENT_LABEL_RE = /改进(?:建议)?\s*[:：]/;
+const IMPROVEMENT_LABEL_RE = /(?:改进(?:建议)?|Improvement(?:\s+suggestion)?)\s*[:：]/i;
 const VERDICT_LINE_RE = /^\s*VERDICT\s*[:：]\s*(perfect|good|poor)(?![a-zA-Z])/i;
 const VERDICT_ANY_RE = /VERDICT\s*[:：]\s*(perfect|good|poor)(?![a-zA-Z])/i;
+
+const SKILL_SUFFIX: Record<Skill, string> = {
+  en2zh: 'En2zh',
+  zh2en: 'Zh2en',
+  spell: 'Spell',
+  listen: 'Listen',
+  sentence: 'Sentence',
+  translate: 'Translate',
+};
+
+const ENCOURAGEMENT_COUNT = 12;
+
+function resolveT(locale?: Locale): TranslateFn {
+  return createT(locale ?? DEFAULT_LOCALE);
+}
 
 function sanitizePlainText(text: string): string {
   return text
@@ -64,10 +82,10 @@ function sanitizePlainText(text: string): string {
     .trim();
 }
 
-function scrubApiKey(text: string, settings: LLMSettings): string {
+function scrubApiKey(text: string, settings: LLMSettings, t: TranslateFn): string {
   const key = (settings?.apiKey ?? '').trim();
   if (key.length < 8) return text;
-  return text.split(key).join('「已隐藏」');
+  return text.split(key).join(t('feedback.hiddenApiKey'));
 }
 
 export function parseFeedbackImprovement(text: string): string | undefined {
@@ -77,7 +95,8 @@ export function parseFeedbackImprovement(text: string): string | undefined {
   if (!match) return undefined;
 
   let rest = text.slice(match.index + match[0].length);
-  const nextLabel = /错因\s*[:：]|记忆点\s*[:：]|改进(?:建议)?\s*[:：]/.exec(rest);
+  const nextLabel =
+    /(?:错因|记忆点|改进(?:建议)?|Cause|Memory|Improvement(?:\s+suggestion)?)\s*[:：]/i.exec(rest);
   if (nextLabel) rest = rest.slice(0, nextLabel.index);
 
   const cleaned = rest.trim();
@@ -92,70 +111,72 @@ function extractSection(text: string, label: string): string | undefined {
   return value ? value : undefined;
 }
 
-const SKILL_LABEL: Record<Skill, string> = {
-  en2zh: '英译中',
-  zh2en: '中译英',
-  spell: '拼写',
-  listen: '听音',
-  sentence: '例句',
-  translate: '互译',
-};
+function skillFocus(t: TranslateFn, skill?: Skill): string {
+  if (!skill) return t('feedback.focusFallback');
+  return t(`feedback.focus${SKILL_SUFFIX[skill]}`);
+}
 
-const SKILL_FOCUS: Record<Skill, string> = {
-  en2zh: '中文释义',
-  zh2en: '英文词形',
-  spell: '准确拼写',
-  listen: '听辨发音',
-  sentence: '语境搭配',
-  translate: '意思表达',
-};
+function skillReason(t: TranslateFn, skill?: Skill): string {
+  if (!skill) return t('feedback.reasonFallback');
+  return t(`feedback.reason${SKILL_SUFFIX[skill]}`);
+}
 
-const SKILL_REASON: Record<Skill, string> = {
-  en2zh: '多半是与近义释义混淆了',
-  zh2en: '多半是近义词没对上号',
-  spell: '常见漏字母、多字母或词尾形式有误',
-  listen: '常见是发音没听清',
-  sentence: '常见是忽略了前后文的搭配',
-  translate: '常见是漏译或译错了关键信息',
-};
-
-function buildLocalImprovement(word: Word, skill?: Skill): string {
+function buildLocalImprovement(word: Word, skill: Skill | undefined, t: TranslateFn): string {
   switch (skill) {
     case 'spell':
-      return `把「${word.term}」拆成音节读三遍再拼写，拼完逐字母核对一遍。`;
+      return t('feedback.improveSpell', { term: word.term });
     case 'listen':
-      return '点击喇叭重听两遍，先跟读一遍，再回到选项排除近义释义。';
+      return t('feedback.improveListen');
     case 'zh2en':
-      return `先默念「${word.meaning}」对应的英文词形，再去选项里核对拼写。`;
+      return t('feedback.improveZh2en', { meaning: word.meaning });
     case 'en2zh':
-      return `先在心里说出「${word.term}」的中文意思，再回到选项逐个排除近义词。`;
+      return t('feedback.improveEn2zh', { term: word.term });
     case 'sentence':
-      return '把整句连读一遍，按句意判断空格该填哪个词。';
+      return t('feedback.improveSentence');
     case 'translate':
-      return `先记住「${word.term}」在本句中的意思，再逐词对齐参考译文。`;
+      return t('feedback.improveTranslate', { term: word.term });
     default:
-      return '先默念词义再作答，答完回头核对一遍拼写。';
+      return t('feedback.improveDefault');
   }
 }
 
-export function localAnswerFeedback(input: AnswerFeedbackInput): AnswerFeedback {
+export function localAnswerFeedback(
+  input: AnswerFeedbackInput,
+  locale: Locale = DEFAULT_LOCALE,
+): AnswerFeedback {
+  const t = resolveT(locale);
   const { word, question, response } = input;
   const userAnswer = response.trim();
   const correctAnswer = question.answer.trim();
   const skill = question.skill;
-  const skillText = skill ? SKILL_LABEL[skill] : '练习';
-  const focus = skill ? SKILL_FOCUS[skill] : '词义';
-  const reason = skill ? SKILL_REASON[skill] : '多半是对词义的理解有偏差';
+  const skillText = skill ? t(`domain.skill.${skill}.label`) : t('feedback.skillFallback');
+  const focus = skillFocus(t, skill);
+  const reason = skillReason(t, skill);
 
   const cause = userAnswer
-    ? `你答的是「${userAnswer}」，正确答案是「${correctAnswer}」；这道${skillText}题考的是「${word.term}」的${focus}，${reason}。`
-    : `你留白了；这道${skillText}题的正确答案是「${correctAnswer}」，考的是「${word.term}」的${focus}。`;
+    ? t('feedback.causeWithAnswer', {
+        user: userAnswer,
+        correct: correctAnswer,
+        skill: skillText,
+        term: word.term,
+        focus,
+        reason,
+      })
+    : t('feedback.causeBlank', {
+        skill: skillText,
+        correct: correctAnswer,
+        term: word.term,
+        focus,
+      });
 
   const parsed = (question.explanation ?? '').trim();
-  const memory = parsed || `${word.term}${word.partOfSpeech ? `（${word.partOfSpeech}）` : ''}：${word.meaning}`;
+  const pos = word.partOfSpeech ? t('domain.practice.posWrap', { pos: word.partOfSpeech }) : '';
+  const memory =
+    parsed ||
+    t('feedback.memoryFallback', { term: word.term, pos, meaning: word.meaning });
 
-  const improvement = buildLocalImprovement(word, skill);
-  const explanation = `错因：${cause}\n记忆点：${memory}\n改进：${improvement}`;
+  const improvement = buildLocalImprovement(word, skill, t);
+  const explanation = `${t('feedback.sectionCause')}: ${cause}\n${t('feedback.sectionMemory')}: ${memory}\n${t('feedback.sectionImprovement')}: ${improvement}`;
 
   return { explanation, improvement, status: 'local-fallback' };
 }
@@ -165,8 +186,11 @@ export async function streamAnswerFeedback(
   settings: LLMSettings,
   options: AnswerFeedbackStreamOptions = {},
 ): Promise<AnswerFeedback> {
+  const locale = options.locale ?? DEFAULT_LOCALE;
+  const t = resolveT(locale);
+
   if (isTranslation(input.question)) {
-    return localAnswerFeedback(input);
+    return localAnswerFeedback(input, locale);
   }
 
   try {
@@ -187,7 +211,7 @@ export async function streamAnswerFeedback(
       }
       const emit = buffer.slice(0, buffer.length - hold);
       carry = buffer.slice(buffer.length - hold);
-      options.onToken?.(scrubApiKey(emit, settings));
+      options.onToken?.(scrubApiKey(emit, settings, t));
     };
 
     const full = await streamChat(settings, messages, {
@@ -201,8 +225,8 @@ export async function streamAnswerFeedback(
       },
     });
 
-    const text = sanitizePlainText(scrubApiKey(full, settings));
-    if (!text) return localAnswerFeedback(input);
+    const text = sanitizePlainText(scrubApiKey(full, settings, t));
+    if (!text) return localAnswerFeedback(input, locale);
 
     const improvement = parseFeedbackImprovement(text);
     return {
@@ -211,7 +235,7 @@ export async function streamAnswerFeedback(
       status: 'ok',
     };
   } catch {
-    return localAnswerFeedback(input);
+    return localAnswerFeedback(input, locale);
   }
 }
 
@@ -265,7 +289,11 @@ function textSimilarity(a: string, b: string): number {
 
 const LOCAL_SIMILARITY_THRESHOLD = 0.4;
 
-export function localTranslationGrade(input: TranslateGradeInput): TranslationGrade {
+export function localTranslationGrade(
+  input: TranslateGradeInput,
+  locale: Locale = DEFAULT_LOCALE,
+): TranslationGrade {
+  const t = resolveT(locale);
   const { word, question, response } = input;
   const userText = response.trim();
   const reference = question.answer.trim();
@@ -278,33 +306,33 @@ export function localTranslationGrade(input: TranslateGradeInput): TranslationGr
 
   if (!normalizedUser) {
     verdict = 'poor';
-    explanation = `你留白了；参考译文是「${reference}」，这次没有作答，按不正确处理。`;
+    explanation = t('feedback.trBlank', { reference });
   } else if (normalizedUser === normalizedReference) {
     verdict = 'perfect';
-    explanation = `你的译文「${userText}」与参考译文「${reference}」意思完全一致，判定为完全正确。`;
+    explanation = t('feedback.trPerfect', { user: userText, reference });
   } else {
     const similarity = textSimilarity(normalizedUser, normalizedReference);
     if (similarity >= LOCAL_SIMILARITY_THRESHOLD) {
       verdict = 'good';
-      explanation = `你的译文「${userText}」与参考译文「${reference}」意思基本对得上，只是措辞或细节上还有差距，判定为基本正确。`;
+      explanation = t('feedback.trGood', { user: userText, reference });
     } else {
       verdict = 'poor';
-      explanation = `你的译文「${userText}」与参考译文「${reference}」差距较大，关键信息可能译错或遗漏，判定为不正确。`;
+      explanation = t('feedback.trPoor', { user: userText, reference });
     }
   }
 
   let improvement: string;
   if (verdict === 'perfect') {
-    improvement = `保持这个表达；下次遇到含「${word.term}」的句子可以先套用这个句式。`;
+    improvement = t('feedback.trImprovePerfect', { term: word.term });
   } else if (verdict === 'good') {
-    improvement = `对照参考译文「${reference}」检查是否漏掉了限定词、介词或时态。`;
+    improvement = t('feedback.trImproveGood', { reference });
   } else {
-    improvement = `先按参考译文「${reference}」拆成主语、谓语、宾语三段，再逐段翻译。`;
+    improvement = t('feedback.trImprovePoor', { reference });
   }
 
   return {
     verdict,
-    explanation: `${explanation}\n改进：${improvement}`,
+    explanation: `${explanation}\n${t('feedback.sectionImprovement')}: ${improvement}`,
     improvement,
     status: 'local-fallback',
   };
@@ -458,9 +486,13 @@ export async function streamTranslationGrade(
   settings: LLMSettings,
   options: TranslationGradeStreamOptions = {},
 ): Promise<TranslationGrade> {
+  const locale = options.locale ?? DEFAULT_LOCALE;
+
   if (!isTranslation(input.question)) {
-    return localTranslationGrade(input);
+    return localTranslationGrade(input, locale);
   }
+
+  const t = resolveT(locale);
 
   try {
     const messages = buildTranslationMessages(input);
@@ -478,10 +510,10 @@ export async function streamTranslationGrade(
     });
 
     const result = parser.finish();
-    if (!result.verdict) return localTranslationGrade(input);
+    if (!result.verdict) return localTranslationGrade(input, locale);
 
-    const text = sanitizePlainText(scrubApiKey(result.body, settings));
-    if (!text) return localTranslationGrade(input);
+    const text = sanitizePlainText(scrubApiKey(result.body, settings, t));
+    if (!text) return localTranslationGrade(input, locale);
 
     const improvement = parseFeedbackImprovement(text);
     return {
@@ -491,24 +523,9 @@ export async function streamTranslationGrade(
       status: 'ok',
     };
   } catch {
-    return localTranslationGrade(input);
+    return localTranslationGrade(input, locale);
   }
 }
-
-const ENCOURAGEMENTS: string[] = [
-  '答对了！这个词又稳住了。',
-  '正确！继续保持这个节奏。',
-  '漂亮，这一题拿下了。',
-  '很好，说明这个词你已经记住了。',
-  '答对啦，下次复习会更轻松。',
-  '不错，这个词算是拿下了。',
-  '对得很准，继续保持。',
-  '厉害，又少了一个易错点。',
-  '稳，这一轮的掌握度在涨。',
-  '完全正确，给自己一点掌声。',
-  '答得好，记忆正在固化。',
-  '通过！这个词可以放心了。',
-];
 
 function hash32(value: number): number {
   let x = Math.imul(Math.trunc(value) ^ 0x9e3779b9, 0x85ebca6b);
@@ -518,30 +535,35 @@ function hash32(value: number): number {
 
 let lastEncouragementIndex = -1;
 
-export function encouragement(seed?: number): string {
+export function encouragement(seed?: number, locale: Locale = DEFAULT_LOCALE): string {
+  const t = resolveT(locale);
   let index: number;
   if (typeof seed === 'number' && Number.isFinite(seed)) {
-    index = hash32(seed) % ENCOURAGEMENTS.length;
+    index = hash32(seed) % ENCOURAGEMENT_COUNT;
   } else {
-    index = Math.floor(Math.random() * ENCOURAGEMENTS.length);
+    index = Math.floor(Math.random() * ENCOURAGEMENT_COUNT);
   }
 
   if (index === lastEncouragementIndex) {
-    index = (index + 1) % ENCOURAGEMENTS.length;
+    index = (index + 1) % ENCOURAGEMENT_COUNT;
   }
   lastEncouragementIndex = index;
 
-  return ENCOURAGEMENTS[index];
+  return t(`feedback.encouragement${index}`);
 }
 
-export function parseFeedbackSections(text: string): {
+export function parseFeedbackSections(
+  text: string,
+  locale: Locale = DEFAULT_LOCALE,
+): {
   cause?: string;
   memory?: string;
   improvement?: string;
 } {
+  const t = resolveT(locale);
   return {
-    cause: extractSection(text, '错因'),
-    memory: extractSection(text, '记忆点'),
+    cause: extractSection(text, t('feedback.sectionCause')),
+    memory: extractSection(text, t('feedback.sectionMemory')),
     improvement: parseFeedbackImprovement(text),
   };
 }

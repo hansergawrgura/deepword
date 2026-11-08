@@ -1,7 +1,3 @@
-/**
- * 浏览器语音合成（SpeechSynthesis）。
- */
-
 import { useEffect, useState } from 'react';
 
 export interface TtsVoice {

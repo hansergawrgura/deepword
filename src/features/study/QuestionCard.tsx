@@ -23,26 +23,20 @@ import { isAnswering, type AnswerFeedbackState, type AnswerPhase } from './types
 export interface QuestionCardProps {
   question: Question;
   word: Word;
-  /** 第几题 / 共几题。 */
   index: number;
   total: number;
   phase: AnswerPhase;
   feedback: AnswerFeedbackState | null;
-  /** 新词第 1 题：反馈附完整词条信息。 */
   showWordInfo: boolean;
-  /** 互译 poor：必须先点「我看完了」才能下一题。 */
+  /** Translation `poor`: block Next until the learner confirms they read the explanation. */
   mustReadExplanation: boolean;
-  /** 答对后的自动跳转倒计时；null = 不自动跳转（手动）。 */
+  /** Auto-advance countdown after a correct answer; null = manual Next. */
   autoAdvance?: { remaining: number; total: number } | null;
-  /** 「让 AI 讲讲」：关闭「自动讲解」时手动请求 AI 讲解。 */
   onAskExplain?: () => void;
-  /** 正在生成 AI 讲解。 */
   explaining?: boolean;
-  /** 点词 / 选句解析（由 StudyView 注入）。 */
   lookup?: Pick<StudyLookupApi, 'lookup'>;
   onSubmit: (response: string) => void;
   onNext: () => void;
-  /** 朗读英文；slow = true 时慢速。 */
   onSpeak: (text: string, slow?: boolean) => void;
 }
 

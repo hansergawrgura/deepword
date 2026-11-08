@@ -35,6 +35,13 @@ import {
   type WordInput,
 } from '@/domain/types';
 import { VENDOR_OPTIONS, inferVendorFromBaseUrl } from '@/infra/llm/providerModel';
+import {
+  MAX_NEW_WORDS,
+  MAX_REVIEW_WORDS,
+  MIN_NEW_WORDS,
+  MIN_REVIEW_WORDS,
+} from '@/domain/rounds';
+import { NEW_QUESTION_MAX, NEW_QUESTION_MIN } from '@/domain/practiceRound';
 import { pruneDaily } from '@/domain/stats';
 import { clamp, uid } from '@/domain/utils';
 import { createT, DEFAULT_LOCALE, normalizeLocale } from '@/i18n';
@@ -126,7 +133,7 @@ function normalizeWordInput(input: WordInput): WordInput | null {
 
 export function makeWord(input: WordInput, options: { id?: string; now?: number } = {}): Word {
   const normalized = normalizeWordInput(input);
-  if (!normalized) throw new Error('单词和释义不能为空');
+  if (!normalized) throw new Error('storage.termMeaningRequired');
   return {
     id: options.id ?? uid('w'),
     term: normalized.term,
@@ -265,18 +272,23 @@ function sanitizePractice(raw: unknown): PracticeSettings {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Partial<PracticeSettings>;
   const defaults = DEFAULT_PRACTICE_SETTINGS;
 
-  const newWordsPerRound = clampInt(source.newWordsPerRound, defaults.newWordsPerRound, 1, 10);
+  const newWordsPerRound = clampInt(
+    source.newWordsPerRound,
+    defaults.newWordsPerRound,
+    MIN_NEW_WORDS,
+    MAX_NEW_WORDS,
+  );
   const questionsPerNewWord = clampInt(
     source.questionsPerNewWord,
     defaults.questionsPerNewWord,
-    4,
-    8,
+    NEW_QUESTION_MIN,
+    NEW_QUESTION_MAX,
   );
   const reviewWordsPerRound = clampInt(
     source.reviewWordsPerRound,
     defaults.reviewWordsPerRound,
-    1,
-    12,
+    MIN_REVIEW_WORDS,
+    MAX_REVIEW_WORDS,
   );
   const reviewQuestionsPerRound = clampInt(
     source.reviewQuestionsPerRound,

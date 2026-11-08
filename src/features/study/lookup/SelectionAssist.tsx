@@ -1,7 +1,3 @@
-/**
- * 在题目卡内选中文本后，于选区旁显示「解析」图标；点击后按题目上下文翻译/解析。
- */
-
 import { useEffect, useState, type RefObject } from 'react';
 import { useT } from '@/i18n';
 import { IconSparkle } from '@/ui/icons';

@@ -1,11 +1,3 @@
-/**
- * 一轮练习的选词与题量规划（v3：基于作答与掌握，无 SRS）。
- *
- * - 新词：未掌握且该 wordId 无任何 Attempt；
- * - 复习词：未掌握且已有 ≥1 次 Attempt；
- * - 排序：scoreReviewWord（薄弱度）降序，同分按最近作答久远优先。
- */
-
 import type { AppData, PracticeSettings, Word } from './types';
 import { clamp, sample, uid } from './utils';
 import { isMastered } from './mastery';
@@ -24,7 +16,7 @@ export interface RoundPlan {
   reviewWords: Word[];
 }
 
-/** 每轮复习词数的下限 / 上限（契约固定 4~6）。 */
+/** 每轮复习词数 4~6。 */
 export const MIN_REVIEW_WORDS = 4;
 export const MAX_REVIEW_WORDS = 6;
 /** settings.reviewWordsPerRound 缺失或非法时的兜底值。 */

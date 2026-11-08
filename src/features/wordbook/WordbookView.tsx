@@ -5,7 +5,6 @@ import { useLocale, useT } from '@/i18n';
 import type { Word, WordInput } from '@/domain/types';
 import { getWordProgressList, type WordProgress } from '@/domain/stats';
 import { relativeTime, truncate } from '@/domain/utils';
-import { normalizeWord } from '@/infra/storage/storage';
 import { Modal } from '@/ui/Modal';
 import { ConfirmDialog } from '@/ui/ConfirmDialog';
 import {
@@ -255,25 +254,10 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
   const [fileName, setFileName] = useState('');
   const preview = useMemo(() => {
     if (!text.trim()) return null;
-    try {
-      const parsed = JSON.parse(text) as unknown;
-      const list = Array.isArray(parsed)
-        ? parsed
-        : parsed && typeof parsed === 'object' && Array.isArray((parsed as { words?: unknown }).words)
-          ? ((parsed as { words: unknown[] }).words ?? [])
-          : null;
-      if (!list) throw new Error(t('wordbook.errorNeedArray'));
-      const inputs: WordInput[] = [];
-      for (const item of list) {
-        if (!item || typeof item !== 'object') continue;
-        const normalized = normalizeWord(item as WordInput);
-        if (normalized) inputs.push(normalized);
-      }
-      return { inputs, total: list.length };
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : t('wordbook.errorJson') };
-    }
-  }, [text, t]);
+    const parsed = actions.parseWordsJson(text);
+    if (!parsed.ok) return { error: parsed.error };
+    return { inputs: parsed.inputs, total: parsed.total };
+  }, [actions, text]);
 
   useEffect(() => {
     if (open) {
@@ -362,17 +346,7 @@ function ImportDialog({ open, onClose }: ImportDialogProps) {
               setText(event.target.value);
               setError('');
             }}
-            placeholder={`[
-  {
-    "term": "serendipity",
-    "phonetic": "/ˌserənˈdɪpəti/",
-    "partOfSpeech": "n.",
-    "meaning": "意外发现美好事物的运气",
-    "example": "Meeting her was pure serendipity.",
-    "exampleTranslation": "遇见她纯属美好的巧合。",
-    "tags": ["雅思", "核心"]
-  }
-]`}
+            placeholder={t('wordbook.importJsonPlaceholder')}
             rows={10}
             spellCheck={false}
           />

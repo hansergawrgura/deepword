@@ -4,7 +4,7 @@ import {
   onOptionFeedback,
   optionStateClass,
   resolveOptionStates,
-} from './optionState';
+} from '@/features/study/optionState';
 
 const OPTIONS = ['面对；对抗', '恶化；变坏', '预料；预期', '波动；起伏'];
 const ANSWER = '波动；起伏';

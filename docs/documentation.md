@@ -1,22 +1,26 @@
-# Documentation updates
+# 文档更新约定
 
-## What lives where
+## 文档放哪里
 
-| Doc | Audience | Update when |
+| 文档 | 读者 | 何时更新 |
 | --- | --- | --- |
-| [AGENTS.md](../AGENTS.md) | Agents + developers | Tooling, layer map, or hard constraints change |
-| [docs/coding-standards.md](./coding-standards.md) | Anyone writing code | Conventions for layers, comments, i18n, identity |
-| [docs/versioning.md](./versioning.md) | Releasers | Version lines or release steps change |
-| [docs/documentation.md](./documentation.md) | Doc maintainers | This policy changes |
-| [CHANGELOG.md](../CHANGELOG.md) | Users + releasers | Every user-visible change (keep `[Unreleased]` current) |
-| i18n catalogs (`src/i18n/catalogs/`) | Product copy | Any user-facing string add/change |
+| [AGENTS.md](../AGENTS.md) | Agent + 开发者 | 工具链、分层图或硬约束变化 |
+| [docs/coding-standards.md](./coding-standards.md) | 写代码的人 | 分层、i18n、identity、测试布局约定变化 |
+| [docs/comments.md](./comments.md) | 写代码的人 | 注释卫生规则变化 |
+| [docs/dev-workflow.md](./dev-workflow.md) | Agent + 开发者 | 分支 / commit / PR / merge 流程变化 |
+| [docs/versioning.md](./versioning.md) | 发版人 | 版本线或发版步骤变化 |
+| [docs/documentation.md](./documentation.md) | 文档维护者 | 本政策本身变化 |
+| [CHANGELOG.md](../CHANGELOG.md) | 用户 + 发版人 | 每个用户可见变化（保持 `[Unreleased]` 最新） |
+| i18n catalogs（`src/i18n/catalogs/`） | 产品文案 | 任一用户可见字符串增改 |
 
-Do not revive removed contract files or WorkBuddy skills. Prefer updating these docs over long in-file essays.
+不要复活已删除的契约文件或 WorkBuddy skill。优先改这些 docs，而不是在源码里写长文。
 
-## Rules
+`docs/` 正文使用**中文**；代码标识符、路径、命令保持原文。
 
-1. **Same PR as the code** when behavior, identity keys, i18n keys, or layer rules change.
-2. **CHANGELOG**: add bullets under `[Unreleased]` as you ship; categorize correctly (`文档` for docs-only).
-3. **i18n**: add keys to **both** `en` and `zh-CN` in the same change; keep structures aligned so TypeScript catches drift.
-4. **Stale refs**: delete comments/links that point at missing docs.
-5. **Notes** under `notes/` are personal backlog, not project standards — do not treat them as contracts.
+## 规则
+
+1. 行为、identity 键、i18n 键或分层规则变化时，**与代码同一 PR** 更新文档。
+2. **CHANGELOG**：随开发往 `[Unreleased]` 追加条目；分类写对（纯文档用 `文档`）。
+3. **i18n**：同一次改动同时改 `en` 与 `zh-CN`；结构对齐，方便 TypeScript 抓漂移。
+4. **过期引用**：删掉指向已不存在文档的注释/链接。
+5. **`notes/`** 是个人 backlog，不是项目规范，勿当契约。

@@ -1,57 +1,63 @@
-# Coding standards
+# 编码规范
 
-Applies to DeepDeep Word (`dpdp-word`). Keep changes small, typed, and layered.
+适用于 DeepDeep Word（`dpdp-word`）。改动宜小、类型明确、分层清晰。
 
-## Package manager
+## 包管理器
 
-Use **pnpm only**. See [AGENTS.md](../AGENTS.md).
+**只用 pnpm**。详见 [AGENTS.md](../AGENTS.md)。
 
-## Directory layers
+## 目录分层
 
 ```
 src/
-├── domain/     # pure logic: types, questions, round FSM, mastery, weakness, stats
-├── infra/      # storage, llm, tts (side effects)
-├── app/        # shell, sidebar, store, version, identity
+├── domain/     # 纯逻辑：types、出题、一轮 FSM、掌握、薄弱、统计
+├── infra/      # storage、llm、tts（副作用）
+├── app/        # shell、sidebar、store、version、identity
 ├── features/   # dashboard / study / wordbook / settings
-├── ui/         # shared Modal, Toast, icons, ErrorBoundary
-├── i18n/       # locale catalogs + t() + React provider
-├── data/       # built-in wordbanks
+├── ui/         # 共用 Modal、Toast、icons、ErrorBoundary
+├── i18n/       # 文案 catalogs + t() + React provider
+├── data/       # 内置词库
 └── styles/     # tokens / base / ui
+
+test/           # Vitest，镜像 src/（代理测例在 test/server）
 ```
 
-- Business rules live in `domain/`.
-- Side effects (AI, TTS, persistence orchestration) live in controllers / `infra` / store — not in views.
-- Views render and call actions; they do not invent domain rules.
+- 业务规则放在 `domain/`。
+- 副作用（AI、TTS、持久化编排）放在 controller / `infra` / store，不要进视图。
+- 视图只负责渲染与调用 actions，不发明领域规则。
+- 测试放在 **`test/`**，不与生产模块并列。
 
 ## Identity
 
-Technical product IDs (storage keys, backup `app`/`scheme`, download prefixes, probe keys) come from **one module**: [`src/app/identity.ts`](../src/app/identity.ts).
+技术向产品 ID（存储键、备份 `app`/`scheme`、下载前缀、探测键）只来自 **一个模块**：[`src/app/identity.ts`](../src/app/identity.ts)。
 
-- Do not hardcode `dpdp-word` / legacy `deepword` prefixes outside identity (except listing legacy keys inside identity itself).
-- Display names belong in **i18n**, not identity.
+- 不要在 identity 之外硬编码 `dpdp-word` / 旧版 `deepword` 前缀（identity 内列举遗留键除外）。
+- 展示名属于 **i18n**，不属于 identity。
 
 ## i18n
 
-- All user-visible copy goes through `src/i18n` catalogs (`en`, `zh-CN`).
-- Default locale is `en`.
-- UI uses `useT()` / `useLocale()`. Domain and infra that emit user-facing text take a `t` function or return message keys + params — they must not hardcode locale strings.
-- LLM **system** prompts (model-facing) are separate from UI i18n.
+- 所有用户可见文案走 `src/i18n` catalogs（`en`、`zh-CN`）。
+- 默认语言为 `zh-CN`。
+- UI 用 `useT()` / `useLocale()`。domain / infra 若产出用户文案，应接收 `t` 或返回 message key + 参数，禁止写死语言字符串。
+- 面向模型的 LLM **system** 提示词与 UI i18n 分离。
 
-## Comments
+## 注释
 
-- Prefer **no comment** when names and types already explain *what*.
-- Keep short **why** comments for non-obvious product or algorithm rules.
-- Do not write long file-header essays that duplicate `docs/`.
-- Do not leave stale references to removed docs or phases.
-- CSS may keep short section banners; brand comments use **DeepDeep Word**.
+完整规则见 [comments.md](./comments.md)。摘要：禁止「复述代码在干什么」；只留短 why；禁止文件头长文与过期 Phase 考古。
 
-## Naming and style
+## 命名与风格
 
-- TypeScript strict; prefer explicit domain types from `domain/types`.
-- Feature CSS co-located with the feature; shared tokens in `src/styles`.
-- Tests next to modules (`*.test.ts`); cover domain and storage migrations.
+- TypeScript strict；领域类型优先用 `domain/types`。
+- Feature CSS 与功能同目录；共用 token 在 `src/styles`。
+- 测试在 `test/`，路径镜像 `src/`（例：`src/domain/practice.ts` → `test/domain/practice.test.ts`）；覆盖 domain 与 storage 迁移/清洗。
 
-## Out of scope for drive-by edits
+## 开发循环
 
-No drive-by refactors, unrelated renames, or new markdown beyond the task. Follow this doc when the task *is* standards/docs work.
+- 分支、commit、PR、merge 见 [dev-workflow.md](./dev-workflow.md)。
+- 优先小 PR、单一意图；代码改动时同步更新 `[Unreleased]` 与两套 i18n catalogs。
+- 合入前跑 `pnpm typecheck`、`pnpm test`、`pnpm build`。
+- 不要在视图里发明领域规则或直接打 infra——经 store / controller actions 派发。
+
+## 顺手改动的边界
+
+禁止顺手大重构、无关重命名，或任务无关的新 markdown。若任务本身就是规范/文档工作，则按本文与 docs 约定改。

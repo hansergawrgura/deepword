@@ -1,5 +1,3 @@
-/** 通用工具函数：id、日期、随机、格式化。 */
-
 import type { Locale } from '@/i18n/types';
 import { DEFAULT_LOCALE } from '@/i18n/types';
 import { createT } from '@/i18n/t';

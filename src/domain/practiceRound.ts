@@ -1,19 +1,3 @@
-/**
- * Phase B 学习流程的「一轮」状态机（纯函数层）。
- *
- * 一轮 = 新词 1 个（每词 4~8 题，默认 6）→ 复习 4~6 词（题量 = 词数～2×词数，默认 10）
- *      → 小结 → 点「继续」下一轮。
- *
- * 状态机阶段（与 PracticeSessionState.stage 对齐）：
- *   gate   新词闸门：先问「认识 / 掌握」；点掌握 → 翻面看释义 → 追问确认。
- *   new    新词出题阶段（无独立教学卡，第 1 题反馈附完整词条信息）。
- *   review 复习阶段（按薄弱度选词，每轮必做）。
- *   done   小结。
- *
- * 本模块只负责「算出下一状态」，不碰 localStorage、不碰 React；
- * UI 负责渲染与副作用（记录作答、调用 AI 讲解等）。
- */
-
 import type {
   AppData,
   PracticeResult,
@@ -24,16 +8,11 @@ import type {
   Word,
 } from './types';
 import { buildMixedQuestions, buildQuestions, checkAnswer, isTranslation } from './practice';
+import { MAX_REVIEW_WORDS, MIN_REVIEW_WORDS } from './rounds';
 import { uid } from './utils';
 
-/* ------------------------------------------------------------------ */
-/* 阶段与题量                                                          */
-/* ------------------------------------------------------------------ */
+export { MIN_REVIEW_WORDS as REVIEW_WORD_MIN, MAX_REVIEW_WORDS as REVIEW_WORD_MAX };
 
-/** 复习词数：4~6 词。 */
-export const REVIEW_WORD_MIN = 4;
-export const REVIEW_WORD_MAX = 6;
-/** 新词每词题量：4~8 题。 */
 export const NEW_QUESTION_MIN = 4;
 export const NEW_QUESTION_MAX = 8;
 

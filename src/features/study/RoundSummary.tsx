@@ -1,7 +1,3 @@
-/**
- * 一轮的小结：成绩单 + 技能分布 + 仍薄弱词 + 掌握判定进度。
- */
-
 import type { PracticeSessionState, Skill, Word } from '@/domain/types';
 import type { MasteryCheck } from '@/domain/mastery';
 import type { WeakWordStat } from '@/domain/weakness';

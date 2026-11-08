@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createApiHandler, createViteMiddleware } from './proxy.mjs';
+import { createApiHandler, createViteMiddleware } from '../../server/proxy.mjs';
 
 const cleanupTasks = [];
 

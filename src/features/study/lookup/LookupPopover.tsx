@@ -1,7 +1,3 @@
-/**
- * 点词 / 选句 / 搜索的解析结果气泡。
- */
-
 import { useEffect, useRef, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from '@/domain/utils';

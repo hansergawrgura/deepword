@@ -11,12 +11,19 @@
 ### 文档（Docs）
 
 - 新增 `docs/`：编码规范、版本迭代、文档更新约定；`AGENTS.md` 指向 docs。
+- 新增 [`docs/dev-workflow.md`](docs/dev-workflow.md)：功能分支 → Conventional Commits → PR → squash merge；`coding-standards` 增补开发循环。
+- 新增 [`docs/comments.md`](docs/comments.md)：注释统一规范（只留短 why；禁止文件头长文与过期 Phase 叙述）。
+- `docs/` 正文统一为中文（标识符 / 路径 / 命令保持原文）。
+- 单测收纳到顶层 [`test/`](test/)（镜像 `src/` + `test/server`），不再与生产代码并列。
 
 ### 变更（Changed）
 
 - 项目更名为 **dpdp-word** / **DeepDeep Word**（中文：深深单词 / 肥鱼单词）；去掉「词渊」品牌文案。
 - 技术标识集中到 `src/app/identity.ts`；本地键改为 `dpdp-word:data:v3`。
-- 新增轻量 i18n（`en` 默认 + `zh-CN`），用户文案进 catalogs。
+- 新增轻量 i18n（默认 `zh-CN`，可选 `en`），用户文案进 catalogs；兜底反馈 / 查词 / 厂商标签等随设置页语言切换。
+- 练习设置边界与 domain 对齐（复习词数 4–6）；设置页 / storage 共用 `rounds` 常量。
+- 备份导出导入与词库 JSON 解析改经 store actions，视图不再直接调用 storage/LLM 侧效应入口。
+- 按 coding-standards 清理过期 Phase/契约注释与文件头长文。
 - 不再预置任何默认 LLM provider（含未验证的 OpenAI Base URL）；需用户自行添加并测试连接。
 - 移除厂商「填入预设」（`VENDOR_PRESETS`）：Base URL / 模型需用户自行填写，厂商选择仅影响思考参数映射与 Base URL 推断。
 

@@ -1,7 +1,3 @@
-/**
- * LLM 传输层类型契约（v3 infra）。
- */
-
 import type { LLMSettings, ProviderKind } from '@/domain/types';
 
 export interface ChatMessage {

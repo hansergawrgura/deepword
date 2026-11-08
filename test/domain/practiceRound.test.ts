@@ -5,8 +5,8 @@ import type {
   PracticeSettings,
   Question,
   Word,
-} from './types';
-import { DEFAULT_PRACTICE_SETTINGS } from './types';
+} from '@/domain/types';
+import { DEFAULT_PRACTICE_SETTINGS } from '@/domain/types';
 import {
   advanceQuestion,
   applyAnswer,
@@ -22,7 +22,7 @@ import {
   startNewStage,
   startReviewStage,
   summarizeSession,
-} from './practiceRound';
+} from '@/domain/practiceRound';
 
 const NOW = new Date('2026-11-07T12:00:00+08:00').getTime();
 

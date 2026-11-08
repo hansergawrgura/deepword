@@ -1,15 +1,3 @@
-/**
- * LLM 传输层：构造 OpenAI 兼容 / Anthropic 请求，统一经同源本地代理转发，
- * 并把各种失败映射为带 code 的 LLMError。
- *
- * 设计原则：
- * - 纯函数（URL 规范化、请求体构造、响应解析、HTTP 状态映射、思考参数映射）与网络调用分离，便于单测；
- * - 所有真实请求都发往 `POST /api/llm/forward`（dev 由 Vite middleware、prod 由 node server 提供），
- *   浏览器不再直连厂商域名，也就不需要 CORS 与 anthropic 浏览器直连头；
- * - 所有失败都抛带 code 的 LLMError，UI 据此给出可操作提示或回退本地题库；
- * - `fetchModels` / `testLLMConnection` 永不抛错，失败返回中文 warning / 可操作提示。
- */
-
 import type { LLMSettings, ProviderKind } from '@/domain/types';
 import {
   resolveEndpoint,

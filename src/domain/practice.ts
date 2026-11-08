@@ -3,65 +3,28 @@ import { DEFAULT_LOCALE } from '@/i18n/types';
 import { createT } from '@/i18n/t';
 import type { TranslateFn } from '@/i18n/types';
 import type { PracticeSettings, Question, Skill, Word } from './types';
-import { normalizeAnswer, uid } from './utils';
+import { normalizeAnswer, partOfSpeechLabel, uid } from './utils';
 
 /** 六个记忆技能，顺序固定（薄弱分析的仪表盘也按此顺序展示）。 */
 export const SKILLS: Skill[] = ['en2zh', 'zh2en', 'spell', 'listen', 'sentence', 'translate'];
 
 export interface SkillMeta {
-  /** 「英译中」「中译英」「拼写」「听音」「例句」「互译」 */
   label: string;
-  /** 「英→中」「中→英」等短标签 */
   short: string;
-  /** 一句话（仪表盘/设置页展示） */
   description: string;
   needsTts: boolean;
   needsAI: boolean;
 }
 
-export const SKILL_META: Record<Skill, SkillMeta> = {
-  en2zh: {
-    label: '英译中',
-    short: '英→中',
-    description: '看到英文单词，选出正确的中文释义，建立词形与词义的连接。',
-    needsTts: false,
-    needsAI: false,
-  },
-  zh2en: {
-    label: '中译英',
-    short: '中→英',
-    description: '看到中文释义，选出对应的英文单词，训练主动回忆。',
-    needsTts: false,
-    needsAI: false,
-  },
-  spell: {
-    label: '拼写',
-    short: '拼写',
-    description: '根据释义与音标拼出英文单词，强化拼写记忆。',
-    needsTts: false,
-    needsAI: false,
-  },
-  listen: {
-    label: '听音',
-    short: '听音',
-    description: '听到发音后选出中文释义，训练听辨与联想。',
-    needsTts: true,
-    needsAI: false,
-  },
-  sentence: {
-    label: '例句',
-    short: '例句',
-    description: '在例句空格中选出正确单词，训练语境理解。',
-    needsTts: false,
-    needsAI: false,
-  },
-  translate: {
-    label: '互译',
-    short: '互译',
-    description: '中英互译自由作答，由 AI 判分（需配置模型）。',
-    needsTts: false,
-    needsAI: true,
-  },
+type SkillCapability = Pick<SkillMeta, 'needsTts' | 'needsAI'>;
+
+export const SKILL_META: Record<Skill, SkillCapability> = {
+  en2zh: { needsTts: false, needsAI: false },
+  zh2en: { needsTts: false, needsAI: false },
+  spell: { needsTts: false, needsAI: false },
+  listen: { needsTts: true, needsAI: false },
+  sentence: { needsTts: false, needsAI: false },
+  translate: { needsTts: false, needsAI: true },
 };
 
 export interface GenerateOptions {
@@ -117,7 +80,7 @@ const VARIANT_LIMIT: Record<Skill, number> = {
   en2zh: 2,
   zh2en: 2,
   spell: 2,
-  listen: 1, // 契约固定题干「听发音，选出正确的释义。」
+  listen: 1,
   sentence: 2,
   translate: 2,
 };
@@ -487,20 +450,29 @@ function collectAcceptableAnswers(term: string): string[] {
 /* 解析文案                                                            */
 /* ------------------------------------------------------------------ */
 
-function describeMeaning(target: UsableWord): string {
+function describeMeaning(target: UsableWord, ctx: BuildContext): string {
   const phonetic = target.phonetic ? ` ${target.phonetic}` : '';
-  const pos = target.partOfSpeech ? ` ${target.partOfSpeech}` : '';
-  return `${target.term}${phonetic}${pos} 意为「${target.meaning}」`;
+  const pos = target.partOfSpeech
+    ? ` ${partOfSpeechLabel(target.partOfSpeech, ctx.locale)}`
+    : '';
+  return ctx.t('domain.practice.meaningDesc', {
+    term: target.term,
+    phonetic,
+    pos,
+    meaning: target.meaning,
+  });
 }
 
-function describeExample(target: UsableWord): string {
+function describeExample(target: UsableWord, ctx: BuildContext): string {
   if (!target.example) return '';
-  const translation = target.exampleTranslation ? `（${target.exampleTranslation}）` : '';
-  return ` 例句：${target.example}${translation}。`;
+  const translation = target.exampleTranslation
+    ? ctx.t('domain.practice.exampleTranslationWrap', { text: target.exampleTranslation })
+    : '';
+  return ctx.t('domain.practice.exampleLine', { example: target.example, translation });
 }
 
-function posSuffix(target: UsableWord): string {
-  return target.partOfSpeech ? `（${target.partOfSpeech}）` : '';
+function posSuffix(target: UsableWord, t: TranslateFn): string {
+  return target.partOfSpeech ? t('domain.practice.posWrap', { pos: target.partOfSpeech }) : '';
 }
 
 /* ------------------------------------------------------------------ */
@@ -535,7 +507,10 @@ function buildMeaningChoiceQuestion(
     prompt: clip(prompt, MAX_PROMPT),
     options,
     answer,
-    explanation: clip(`${describeMeaning(target)}。${describeExample(target)}`, MAX_EXPLANATION),
+    explanation: clip(
+      `${describeMeaning(target, ctx)}${describeExample(target, ctx) ? ` ${describeExample(target, ctx)}` : ''}`,
+      MAX_EXPLANATION,
+    ),
     difficulty: DIFFICULTY[skill],
     skill,
     audio: skill === 'listen' ? true : undefined,
@@ -566,7 +541,11 @@ function buildTermChoiceQuestion(
     options,
     answer,
     explanation: clip(
-      `「${target.meaning}」对应的单词是 ${target.term}${posSuffix(target)}。${describeExample(target)}`,
+      `${ctx.t('domain.practice.zh2enExplain', {
+        meaning: target.meaning,
+        term: target.term,
+        posWrap: posSuffix(target, ctx.t),
+      })}${describeExample(target, ctx) ? ` ${describeExample(target, ctx)}` : ''}`,
       MAX_EXPLANATION,
     ),
     difficulty: DIFFICULTY.zh2en,
@@ -595,7 +574,11 @@ function buildSpellQuestion(
     answer,
     acceptableAnswers: collectAcceptableAnswers(answer),
     explanation: clip(
-      `正确拼写是 ${target.term}${target.phonetic ? ` ${target.phonetic}` : ''}，意为「${target.meaning}」。${describeExample(target)}`,
+      `${ctx.t('domain.practice.spellExplain', {
+        term: target.term,
+        phonetic: target.phonetic ? ` ${target.phonetic}` : '',
+        meaning: target.meaning,
+      })}${describeExample(target, ctx) ? ` ${describeExample(target, ctx)}` : ''}`,
       MAX_EXPLANATION,
     ),
     difficulty: DIFFICULTY.spell,
@@ -627,7 +610,9 @@ function buildSentenceQuestion(
     variant === 0
       ? ctx.t('domain.practice.sentencePromptV0', { blank: blank.prompt })
       : ctx.t('domain.practice.sentencePromptV1', { blank: blank.prompt });
-  const translation = target.exampleTranslation ? `（${target.exampleTranslation}）` : '';
+  const translation = target.exampleTranslation
+    ? ctx.t('domain.practice.exampleTranslationWrap', { text: target.exampleTranslation })
+    : '';
 
   return {
     id: uid('q'),
@@ -636,7 +621,12 @@ function buildSentenceQuestion(
     options,
     answer,
     explanation: clip(
-      `应填「${answer}」：${target.example}${translation}。${describeMeaning(target)}。`,
+      ctx.t('domain.practice.sentenceExplain', {
+        answer,
+        example: target.example,
+        translation,
+        meaning: describeMeaning(target, ctx),
+      }),
       MAX_EXPLANATION,
     ),
     difficulty: DIFFICULTY.sentence,
@@ -667,7 +657,7 @@ function buildTranslateQuestion(
     explanation: clip(
       ctx.t('domain.practice.referenceTranslation', {
         answer,
-        meaning: describeMeaning(target),
+        meaning: describeMeaning(target, ctx),
       }),
       MAX_EXPLANATION,
     ),
@@ -738,7 +728,7 @@ function tryBuildSkill(
 /* 技能序列                                                            */
 /* ------------------------------------------------------------------ */
 
-/** 选出 count 道题实际可用的技能序列；见契约第 2 节。 */
+/** 选出 count 道题实际可用的技能序列。 */
 export function pickSkills(
   options: Pick<GenerateOptions, 'skills' | 'ttsAvailable' | 'aiAvailable' | 'rng'> & {
     count: number;

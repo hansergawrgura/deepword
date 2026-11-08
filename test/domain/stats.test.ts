@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { AppData, Attempt, DailyStat, Mistake, Word } from './types';
-import { DEFAULT_PRACTICE_SETTINGS } from './types';
-import { emptyAppData } from './fixtures';
-import { dayKey } from './utils';
+import type { AppData, Attempt, DailyStat, Mistake, Word } from '@/domain/types';
+import { DEFAULT_PRACTICE_SETTINGS } from '@/domain/types';
+import { emptyAppData } from '@/domain/fixtures';
+import { dayKey } from '@/domain/utils';
 import {
   accuracyForWord,
   computeStreak,
@@ -15,7 +15,7 @@ import {
   getWeakWords,
   pruneDaily,
   recordDailyEvent,
-} from './stats';
+} from '@/domain/stats';
 
 const NOW = new Date('2026-11-07T12:00:00+08:00').getTime();
 const DAY = 86_400_000;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { AppData, Attempt, MasteryRecord, Skill, Word } from './types';
-import { emptyAppData } from './fixtures';
-import { getSkillStats, getWeaknessReport, scoreWordWeakness } from './weakness';
+import type { AppData, Attempt, MasteryRecord, Skill, Word } from '@/domain/types';
+import { emptyAppData } from '@/domain/fixtures';
+import { getSkillStats, getWeaknessReport, scoreWordWeakness } from '@/domain/weakness';
 
 const NOW = new Date('2026-11-07T12:00:00+08:00').getTime();
 const DAY = 86_400_000;
@@ -36,7 +36,7 @@ function makeData(overrides: Partial<AppData> = {}): AppData {
 
 describe('getSkillStats', () => {
   it('固定返回 6 个技能，顺序与 SKILLS 一致', () => {
-    const stats = getSkillStats(makeData(), NOW);
+    const stats = getSkillStats(makeData(), NOW, 'en');
     expect(stats.map((stat) => stat.skill)).toEqual([
       'en2zh',
       'zh2en',
@@ -56,7 +56,7 @@ describe('getSkillStats', () => {
         makeAttempt({ wordId: 'w1', correct: false, createdAt: NOW - 3 * DAY, skill: 'en2zh' }),
       ],
     });
-    const stats = getSkillStats(data, NOW);
+    const stats = getSkillStats(data, NOW, 'en');
     const en2zh = stats.find((stat) => stat.skill === 'en2zh');
     expect(en2zh?.attempts).toBe(3);
     expect(en2zh?.correct).toBe(2);
@@ -74,20 +74,20 @@ describe('getSkillStats', () => {
         makeAttempt({ wordId: 'w1', correct: true, createdAt: NOW - 2 * DAY }),
       ],
     });
-    const stats = getSkillStats(data, NOW);
+    const stats = getSkillStats(data, NOW, 'en');
     expect(stats.every((stat) => stat.attempts === 0)).toBe(true);
     expect(stats.every((stat) => stat.accuracy === null)).toBe(true);
   });
 
   it('脏数据（空作答表 / 未来时间戳）不抛错', () => {
-    expect(() => getSkillStats(makeData(), NOW)).not.toThrow();
+    expect(() => getSkillStats(makeData(), NOW, 'en')).not.toThrow();
     const data = makeData({
       attempts: [
         makeAttempt({ wordId: 'w1', correct: true, createdAt: NOW + DAY, skill: 'en2zh' }),
       ],
     });
     // 未来时间戳按 now 截断，不会出现「负天数」。
-    expect(getSkillStats(data, NOW)[0].lastAt).toBe(NOW);
+    expect(getSkillStats(data, NOW, 'en')[0].lastAt).toBe(NOW);
   });
 });
 
@@ -102,7 +102,7 @@ describe('getWeaknessReport', () => {
   ];
 
   it('没有任何练习记录时：未练习、最弱技能为空、focus 提示先练一轮', () => {
-    const report = getWeaknessReport(makeData({ words: WORDS }), { now: NOW });
+    const report = getWeaknessReport(makeData({ words: WORDS }), { now: NOW, locale: 'en' });
     expect(report.practiced).toBe(false);
     expect(report.weakestSkill).toBeNull();
     expect(report.weakestWords).toEqual([]);
@@ -119,7 +119,7 @@ describe('getWeaknessReport', () => {
         makeAttempt({ wordId: 'w2', correct: false, createdAt: NOW - DAY, skill: 'spell' }),
       ],
     });
-    const report = getWeaknessReport(data, { now: NOW });
+    const report = getWeaknessReport(data, { now: NOW, locale: 'en' });
     expect(report.practiced).toBe(true);
     expect(report.weakestSkill).toBe('spell');
     expect(report.focus).toContain('most work');
@@ -136,7 +136,7 @@ describe('getWeaknessReport', () => {
         makeAttempt({ wordId: 'w3', correct: true, createdAt: NOW - DAY, skill: 'en2zh' }),
       ],
     });
-    const report = getWeaknessReport(data, { now: NOW });
+    const report = getWeaknessReport(data, { now: NOW, locale: 'en' });
     expect(report.weakestWords.map((item) => item.word.id)).toEqual(['w2', 'w1']);
     expect(report.weakestWords[0].wrongCount).toBe(2);
     // 从没错过的词没有复习价值，不进最弱词列表。
@@ -153,8 +153,8 @@ describe('getWeaknessReport', () => {
       }),
     );
     const data = makeData({ words: WORDS, attempts });
-    expect(getWeaknessReport(data, { now: NOW }).weakestWords).toHaveLength(5);
-    expect(getWeaknessReport(data, { limit: 2, now: NOW }).weakestWords).toHaveLength(2);
+    expect(getWeaknessReport(data, { now: NOW, locale: 'en' }).weakestWords).toHaveLength(5);
+    expect(getWeaknessReport(data, { limit: 2, now: NOW, locale: 'en' }).weakestWords).toHaveLength(2);
   });
 
   it('掌握词不进入最弱词列表', () => {
@@ -165,7 +165,7 @@ describe('getWeaknessReport', () => {
       ],
       mastery: { w1: { wordId: 'w1', masteredAt: NOW, source: 'rule' } as MasteryRecord },
     });
-    const report = getWeaknessReport(data, { now: NOW });
+    const report = getWeaknessReport(data, { now: NOW, locale: 'en' });
     expect(report.weakestWords).toEqual([]);
   });
 });

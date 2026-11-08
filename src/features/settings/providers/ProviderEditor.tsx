@@ -1,10 +1,3 @@
-/**
- * Provider 编辑表单：名称、协议、厂商、Base URL、API Key、默认 model、
- * 白名单、温度、最大 tokens、思考开关，以及测试连接。
- *
- * 表单只维护本地草稿；保存 / 切换 / 删除由父组件调用 useApp().actions。
- */
-
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type {
   ProviderDraft,
@@ -20,7 +13,7 @@ import { IconClose, IconEyeToggle, IconRefresh } from '@/ui/icons';
 import ModelListDialog from './ModelListDialog';
 import { useLocale, useT } from '@/i18n';
 import {
-  PROTOCOL_OPTIONS,
+  PROTOCOL_KINDS,
   draftFromProfile,
   draftToLLMSettings,
   emptyProviderDraft,
@@ -109,7 +102,7 @@ export default function ProviderEditor({
       ...current,
       vendor,
       // 名称为空时用厂商名补一个可读的默认名称。
-      name: current.name.trim() ? current.name : vendorLabel(vendor),
+      name: current.name.trim() ? current.name : vendorLabel(vendor, locale),
     }));
     resetFeedback();
   }
@@ -220,18 +213,18 @@ export default function ProviderEditor({
               role="group"
               aria-label={t('providers.protocol')}
             >
-              {PROTOCOL_OPTIONS.map((option) => (
+              {PROTOCOL_KINDS.map((value) => (
                 <button
-                  key={option.value}
+                  key={value}
                   type="button"
                   className={cx(
                     'segmented__option',
-                    draft.protocol === option.value && 'segmented__option--active',
+                    draft.protocol === value && 'segmented__option--active',
                   )}
-                  aria-pressed={draft.protocol === option.value}
-                  onClick={() => update({ protocol: option.value })}
+                  aria-pressed={draft.protocol === value}
+                  onClick={() => update({ protocol: value })}
                 >
-                  {protocolLabel(option.value, t)}
+                  {protocolLabel(value, t)}
                 </button>
               ))}
             </div>
@@ -250,7 +243,7 @@ export default function ProviderEditor({
             >
               {VENDOR_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {vendorLabel(option.value, locale)}
                 </option>
               ))}
             </select>

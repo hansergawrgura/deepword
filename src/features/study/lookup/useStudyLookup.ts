@@ -1,11 +1,9 @@
-/**
- * 学习页即时解析：点词 / 选句 / 搜索共用状态与请求。
- */
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LLMSettings, Question, Word } from '@/domain/types';
+import { useLocale, useT } from '@/i18n';
 import {
   buildQuestionLookupContext,
+  formatLocalWordLookup,
   LLMError,
   normalizeLookupText,
   runLookup,
@@ -43,6 +41,8 @@ export function useStudyLookup({
   question,
   word,
 }: UseStudyLookupArgs) {
+  const t = useT();
+  const locale = useLocale();
   const [active, setActive] = useState<StudyLookupState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -88,10 +88,9 @@ export function useStudyLookup({
       });
 
       if (!aiAvailable || !llmSettings) {
-        // 无 AI 时仍尝试本地词库（runLookup 在无 settings 前我们自己查）。
         const local = words.find((item) => item.term.trim().toLowerCase() === query.toLowerCase());
         if (local) {
-          const text = `${local.term}${local.phonetic ? ` ${local.phonetic}` : ''}：${local.meaning}`;
+          const text = formatLocalWordLookup(local, t);
           setActive({
             kind,
             query,
@@ -107,7 +106,7 @@ export function useStudyLookup({
           kind,
           query,
           status: 'error',
-          text: '未配置可用 AI，无法在线解析。可先在设置里接入模型。',
+          text: t('study.lookupNoAi'),
           cached: false,
           anchor,
         });
@@ -118,7 +117,7 @@ export function useStudyLookup({
         const result = await runLookup(
           llmSettings,
           { kind, text: query, context },
-          { signal: controller.signal, words },
+          { signal: controller.signal, words, locale },
         );
         if (controller.signal.aborted) return;
         setActive({
@@ -137,7 +136,7 @@ export function useStudyLookup({
             ? error.message
             : error instanceof Error
               ? error.message
-              : '解析失败，请稍后再试。';
+              : t('study.lookupFailed');
         setActive({
           kind,
           query,
@@ -148,7 +147,7 @@ export function useStudyLookup({
         });
       }
     },
-    [aiAvailable, context, llmSettings, words],
+    [aiAvailable, context, llmSettings, locale, t, words],
   );
 
   return {

@@ -1,34 +1,34 @@
-# Versioning and releases
+# 版本与发版
 
-This project follows [Semantic Versioning](https://semver.org/) and [Keep a Changelog](https://keepachangelog.com/). Categories in Chinese: `新增` / `变更` / `迁移` / `修复` / `移除` / `安全` / `文档`.
+本项目遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/) 与 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。CHANGELOG 分类：`新增` / `变更` / `迁移` / `修复` / `移除` / `安全` / `文档`。
 
-## Version lines
+## 版本线
 
-| Line | Where | When to bump |
+| 线 | 位置 | 何时 bump |
 | --- | --- | --- |
-| **App** `APP_VERSION` | [`package.json`](../package.json) `version` **and** [`src/app/version.ts`](../src/app/version.ts) (must match) | User-visible feature, fix, or packaging change |
-| **Data** `DATA_VERSION` | [`src/app/identity.ts`](../src/app/identity.ts) / domain types | Schema shape change that breaks old payloads |
-| **Feedback prompt** `FEEDBACK_PROMPT_VERSION` | `src/infra/llm/feedbackPrompts.ts` | User-facing explanation prompt contract change |
+| **应用** `APP_VERSION` | [`package.json`](../package.json) 的 `version` **与** [`src/app/version.ts`](../src/app/version.ts)（必须一致） | 用户可见功能、修复或打包变化 |
+| **数据** `DATA_VERSION` | [`src/app/identity.ts`](../src/app/identity.ts) / 领域类型 | 破坏旧载荷的 schema 形态变化 |
+| **讲解提示词** `FEEDBACK_PROMPT_VERSION` | `src/infra/llm/feedbackPrompts.ts` | 面向用户的讲解提示词契约变化 |
 
-Storage key is derived as `` `${APP_ID}:data:v${DATA_VERSION}` `` from identity. Changing `APP_ID` or `DATA_VERSION` changes the key; plan migration or greenfield wipe accordingly.
+存储键由 identity 推导为 `` `${APP_ID}:data:v${DATA_VERSION}` ``。改 `APP_ID` 或 `DATA_VERSION` 会换键；需规划迁移或绿场清空。
 
-Do **not** bump `DATA_VERSION` for optional additive fields that cleaners default safely (e.g. `locale`).
+清洗器能安全给默认值的可选增量字段（如 `locale`）**不要** bump `DATA_VERSION`。
 
-## SemVer for the app
+## 应用 SemVer
 
-- **MAJOR**: breaking data/API expectations for users (e.g. wipe / incompatible backup).
-- **MINOR**: backward-compatible features.
-- **PATCH**: fixes and small docs/chore with no behavior risk.
+- **MAJOR**：对用户破坏数据/API 预期（如清空、备份不兼容）。
+- **MINOR**：向后兼容的新能力。
+- **PATCH**：修复，以及无行为风险的小文档/chore。
 
-Record every release under `[X.Y.Z]` in [CHANGELOG.md](../CHANGELOG.md). Keep `[Unreleased]` for WIP.
+每次正式发版在 [CHANGELOG.md](../CHANGELOG.md) 写 `[X.Y.Z]` 段；进行中的改动放在 `[Unreleased]`。
 
-## Release checklist
+## 发版清单
 
-1. Decide SemVer bump; note whether `DATA_VERSION` / prompt versions change.
-2. Move `[Unreleased]` notes into a dated `[X.Y.Z]` section; leave a fresh empty `[Unreleased]`.
-3. Set the same version in `package.json` and `src/app/version.ts`.
-4. Run `pnpm typecheck`, `pnpm test`, `pnpm build`.
-5. Commit with Conventional Commits, e.g. `chore(release): vX.Y.Z` (Chinese body OK).
-6. Do not push, tag, amend, or skip hooks unless the maintainer asks.
+1. 决定 SemVer 档位；注明是否改动 `DATA_VERSION` / 提示词版本。
+2. 把 `[Unreleased]` 迁入带日期的 `[X.Y.Z]`；留下空的新 `[Unreleased]`。
+3. `package.json` 与 `src/app/version.ts` 写成同一版本号。
+4. 跑 `pnpm typecheck`、`pnpm test`、`pnpm build`。
+5. 用 Conventional Commits 提交，例如 `chore(release): vX.Y.Z`（正文可用中文）。
+6. 除非维护者要求，否则不 push、不打 tag、不 amend、不跳过 hooks。
 
-There is no automated bump skill in-repo; follow this checklist manually.
+仓库内无自动升版本 skill；按本清单手动执行。
