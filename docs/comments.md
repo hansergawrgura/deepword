@@ -21,7 +21,7 @@
 - 复述已经命名清楚的 props / 参数 / 返回值。
 - 只起装饰作用的 TypeScript 分割线（`/* ---- Section ---- */`）。
 - import 上方的长篇「Overview / Responsibilities / Flow」头。
-- 重复 CHANGELOG 或 PR 历史的注释。
+- 重复 CHANGELOG 或提交历史的注释。
 
 ## 测试
 

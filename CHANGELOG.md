@@ -11,7 +11,7 @@
 ### 文档（Docs）
 
 - 新增 `docs/`：编码规范、版本迭代、文档更新约定；`AGENTS.md` 指向 docs。
-- 新增 [`docs/dev-workflow.md`](docs/dev-workflow.md)：功能分支 → Conventional Commits → PR → squash merge；`coding-standards` 增补开发循环。
+- 新增 [`docs/dev-workflow.md`](docs/dev-workflow.md)：功能开发 → Conventional Commits → 直接推 `main`（不开 PR）；`coding-standards` 增补开发循环。
 - 新增 [`docs/comments.md`](docs/comments.md)：注释统一规范（只留短 why；禁止文件头长文与过期 Phase 叙述）。
 - `docs/` 正文统一为中文（标识符 / 路径 / 命令保持原文）。
 - 单测收纳到顶层 [`test/`](test/)（镜像 `src/` + `test/server`），不再与生产代码并列。

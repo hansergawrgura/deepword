@@ -2,7 +2,7 @@
 
 DeepDeep Word (`dpdp-word`). All agents and developers follow these conventions.
 
-Longer norms live under [`docs/`](docs/README.md): [coding standards](docs/coding-standards.md), [comments](docs/comments.md), [dev workflow](docs/dev-workflow.md) (branch / commit / PR / merge), [versioning](docs/versioning.md), [documentation](docs/documentation.md).
+Longer norms live under [`docs/`](docs/README.md): [coding standards](docs/coding-standards.md), [comments](docs/comments.md), [dev workflow](docs/dev-workflow.md) (commit → push `main`, no PR), [versioning](docs/versioning.md), [documentation](docs/documentation.md).
 
 ## Package manager: pnpm only
 

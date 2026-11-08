@@ -53,9 +53,9 @@ test/           # Vitest，镜像 src/（代理测例在 test/server）
 
 ## 开发循环
 
-- 分支、commit、PR、merge 见 [dev-workflow.md](./dev-workflow.md)。
-- 优先小 PR、单一意图；代码改动时同步更新 `[Unreleased]` 与两套 i18n catalogs。
-- 合入前跑 `pnpm typecheck`、`pnpm test`、`pnpm build`。
+- 分支、commit、推 `main` 见 [dev-workflow.md](./dev-workflow.md)。
+- 优先小步提交、单一意图；代码改动时同步更新 `[Unreleased]` 与两套 i18n catalogs。
+- 推送前跑 `pnpm typecheck`、`pnpm test`、`pnpm build`。
 - 不要在视图里发明领域规则或直接打 infra——经 store / controller actions 派发。
 
 ## 顺手改动的边界
